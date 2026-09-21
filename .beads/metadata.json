@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "laya_go",
+  "project_id": "4a1fa50a-d290-4658-9209-29187118b968"
+}
