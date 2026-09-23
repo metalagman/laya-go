@@ -75,4 +75,4 @@ inference, and model lifecycle remain unchanged. Do not replace a rejected
 route with unconditional/default edges and do not weaken offline gates.
 
 The protected graph asserts the accepted immutable bundle identity
-`sha256:b3d35e00b0689988dff23f0eeed8721f10cce2c3a10d720f6c7d42cfc7d8c4de`.
+`sha256:963bc035d885e0463ea1d7d54906cadf0e2a3a41073e131921800ea5cc358935`.
