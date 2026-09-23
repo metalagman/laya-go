@@ -13,14 +13,6 @@ on:
         description: SHA-256 of that exact bundle archive
         required: true
         type: string
-      onnxruntime_url:
-        description: Public HTTPS URL of pinned libonnxruntime.so.1.29.0
-        required: true
-        type: string
-      tokenizers_url:
-        description: Public HTTPS URL of pinned libtokenizers.a
-        required: true
-        type: string
 
 permissions:
   contents: read
@@ -35,8 +27,8 @@ jobs:
       CGO_ENABLED: "1"
       BUNDLE_URL: ${{ inputs.bundle_url }}
       BUNDLE_SHA256: ${{ inputs.bundle_sha256 }}
-      ONNXRUNTIME_URL: ${{ inputs.onnxruntime_url }}
-      TOKENIZERS_URL: ${{ inputs.tokenizers_url }}
+      ONNXRUNTIME_URL: https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-x64-1.29.0.tgz
+      TOKENIZERS_URL: https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz
     steps:
       - name: Check out committed sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,16 +80,20 @@ jobs:
           artifact_root="$RUNNER_TEMP/laya-native-ci"
           mkdir -m 700 "$artifact_root"
           curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/bundle.tar.gz" "$BUNDLE_URL"
-          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/libonnxruntime.so.1.29.0" "$ONNXRUNTIME_URL"
-          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/libtokenizers.a" "$TOKENIZERS_URL"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/onnxruntime.tgz" "$ONNXRUNTIME_URL"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/tokenizers.tar.gz" "$TOKENIZERS_URL"
           echo "$BUNDLE_SHA256  $artifact_root/bundle.tar.gz" | sha256sum --check --status
-          echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $artifact_root/libonnxruntime.so.1.29.0" | sha256sum --check --status
+          echo "c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba  $artifact_root/onnxruntime.tgz" | sha256sum --check --status
+          echo "72556cdca798dd4ea7cdaba308e5f0d68a8cb93b67c96edf485b7a0edd7b07f4  $artifact_root/tokenizers.tar.gz" | sha256sum --check --status
+          tar -xzf "$artifact_root/onnxruntime.tgz" -C "$artifact_root" onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0
+          tar -xzf "$artifact_root/tokenizers.tar.gz" -C "$artifact_root" libtokenizers.a
+          echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" | sha256sum --check --status
           echo "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50  $artifact_root/libtokenizers.a" | sha256sum --check --status
           python3 scripts/ci-unpack-bundle.py "$artifact_root/bundle.tar.gz" "$artifact_root/bundle"
           actual="$(go run ./internal/cmd/bundlecheck "$artifact_root/bundle")"
           jq -e --arg expected 'sha256:b3d35e00b0689988dff23f0eeed8721f10cce2c3a10d720f6c7d42cfc7d8c4de' '.bundle_id == $expected' <<< "$actual"
           mkdir -m 700 "$artifact_root/embed-work"
-          echo "LAYA_ONNXRUNTIME_LIBRARY=$artifact_root/libonnxruntime.so.1.29.0" >> "$GITHUB_ENV"
+          echo "LAYA_ONNXRUNTIME_LIBRARY=$artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" >> "$GITHUB_ENV"
           echo "LAYA_TOKENIZERS_LIBRARY=$artifact_root/libtokenizers.a" >> "$GITHUB_ENV"
           echo "LAYA_BUNDLE_DIR=$artifact_root/bundle" >> "$GITHUB_ENV"
           echo "LAYA_EMBED_WORKDIR=$artifact_root/embed-work" >> "$GITHUB_ENV"

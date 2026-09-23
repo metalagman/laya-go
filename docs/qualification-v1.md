@@ -13,12 +13,12 @@ gates pass offline.
 This is not yet an advertised supported-platform claim: the native GitHub
 Actions job has not completed against a clean committed checkout. The
 `Native qualification` workflow is manual and uses a GitHub-hosted runner. A
-trusted operator must provide public HTTPS URLs for a root-layout bundle
-archive and the two exact native libraries, plus the bundle archive SHA-256.
-The job checks the archive digest before safe extraction, verifies pinned
-native file digests/ABI and the expected logical bundle ID, and then runs the
-protected gates offline. Missing, wrong, or unavailable artifacts fail the
-job; they do not turn skipped tests into support evidence. No self-hosted
+trusted operator must provide a public HTTPS URL for a root-layout bundle
+archive and its SHA-256. The workflow obtains the two native libraries from
+their pinned official release archives. It verifies archive digests before
+extraction, then native file digests/ABI and the expected logical bundle ID,
+and runs the protected gates offline. Missing, wrong, or unavailable artifacts
+fail the job; they do not turn skipped tests into support evidence. No self-hosted
 runner, fork pull request, or runtime model downloader is involved.
 
 No other OS/architecture, quantized/optimized precision, execution provider,
