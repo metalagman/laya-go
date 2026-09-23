@@ -237,6 +237,9 @@ native inputs, an embedded work directory, a previous immutable bundle for
 rollback verification, and a clean tracked checkout. `task package:linux-amd64`
 archives committed source, not model weights or native libraries. See
 [Release preparation](docs/release-v0.1.md) for prerequisites and recovery.
+The separate `layajev` npm release candidate is documented in
+[npm release and npx operations](docs/layajev-npm-release.md); it currently
+targets only `linux/amd64` and does not include a model bundle or ONNX Runtime.
 For the first v0.1.0 release, `task release:verify-initial` runs the same
 protected gates but explicitly reports that rollback to a prior release cannot
 be verified because no prior release exists.

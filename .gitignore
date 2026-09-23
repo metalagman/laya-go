@@ -6,9 +6,17 @@
 *.gate.lock*
 
 # Go build and test output.
+bin/
+dist/
+*.exe
+*.a
+*.o
 *.test
 *.out
 coverage.txt
+coverage.out
+cover.out
+*.coverprofile
 
 # Native and local runtime artifacts.
 *.dll
@@ -19,10 +27,23 @@ coverage.txt
 # Local tools, caches, and editors.
 .bin/
 .cache/
+.gocache/
+.gomodcache/
 .venv/
 __pycache__/
 .idea/
 .vscode/
+.fleet/
+.zed/
+*.iml
+*.swp
+*.swo
+*~
+
+# Logs and temporary output.
+*.log
+tmp/
+temp/
 
 # Operating-system metadata.
 .DS_Store

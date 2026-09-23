@@ -1,0 +1,83 @@
+# Generated from omnidist CI and narrowed to a trusted, non-publishing release candidate.
+# Publishing is a separate operator action after reviewing these artifacts.
+name: layajev npm release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: SemVer candidate to stage (for example, 0.2.0-rc.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  stage-linux-amd64:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "1"
+      TOKENIZERS_URL: https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz
+    steps:
+      - name: Check out committed sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Validate candidate version
+        shell: bash
+        env:
+          CANDIDATE_VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$CANDIDATE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Expected a SemVer candidate without build metadata" >&2
+            exit 1
+          fi
+          echo "OMNIDIST_VERSION=$CANDIDATE_VERSION" >> "$GITHUB_ENV"
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          cache: false
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Acquire verified build-time tokenizer archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          native_dir="$RUNNER_TEMP/layajev-native"
+          mkdir -m 700 "$native_dir"
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            --output "$native_dir/tokenizers.tar.gz" "$TOKENIZERS_URL"
+          echo "72556cdca798dd4ea7cdaba308e5f0d68a8cb93b67c96edf485b7a0edd7b07f4  $native_dir/tokenizers.tar.gz" | sha256sum --check --status
+          tar -xzf "$native_dir/tokenizers.tar.gz" -C "$native_dir" libtokenizers.a
+          echo "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50  $native_dir/libtokenizers.a" | sha256sum --check --status
+          echo "CGO_LDFLAGS=-L$native_dir" >> "$GITHUB_ENV"
+
+      - name: Build, stage, and verify npm packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          npx -y @omnidist/omnidist@0.1.37 build
+          npx -y @omnidist/omnidist@0.1.37 stage
+          npx -y @omnidist/omnidist@0.1.37 verify
+          test "$(find .omnidist/default/dist/linux -mindepth 1 -maxdepth 1 -type d -printf '%f\n')" = amd64
+          test "$(cat .omnidist/default/dist/VERSION)" = "$OMNIDIST_VERSION"
+          .omnidist/default/dist/linux/amd64/layajev --help >/dev/null
+
+      - name: Upload reviewed candidate only
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: layajev-npm-linux-amd64-${{ inputs.version }}
+          path: .omnidist/default/npm/
+          if-no-files-found: error
+          retention-days: 7
