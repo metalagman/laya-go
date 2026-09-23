@@ -22,6 +22,7 @@ jobs:
       GOTOOLCHAIN: local
       CGO_ENABLED: "1"
       TOKENIZERS_URL: https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz
+      ONNXRUNTIME_URL: https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-x64-1.29.0.tgz
     steps:
       - name: Check out committed sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -63,13 +64,29 @@ jobs:
           echo "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50  $native_dir/libtokenizers.a" | sha256sum --check --status
           echo "CGO_LDFLAGS=-L$native_dir" >> "$GITHUB_ENV"
 
+      - name: Acquire verified packaged ONNX Runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          runtime_dir="$RUNNER_TEMP/layajev-onnxruntime"
+          mkdir -m 700 "$runtime_dir"
+          curl --fail --silent --show-error --location --retry 3 --proto '=https' --proto-redir '=https' \
+            --output "$runtime_dir/onnxruntime.tgz" "$ONNXRUNTIME_URL"
+          echo "c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba  $runtime_dir/onnxruntime.tgz" | sha256sum --check --status
+          tar -xzf "$runtime_dir/onnxruntime.tgz" -C "$runtime_dir"
+          echo "LAYA_ONNXRUNTIME_DISTRIBUTION=$runtime_dir/onnxruntime-linux-x64-1.29.0" >> "$GITHUB_ENV"
+
       - name: Build, stage, and verify npm packages
         shell: bash
         run: |
           set -euo pipefail
+          go install github.com/go-task/task/v3/cmd/task@v3.53.1
           npx -y @omnidist/omnidist@0.1.37 build
           npx -y @omnidist/omnidist@0.1.37 stage
+          task package:npm-native
           npx -y @omnidist/omnidist@0.1.37 verify
+          npm pack --dry-run --json .omnidist/default/npm/@metalagman/layajev-linux-x64 \
+            | jq -e '.[0].files | map(.path) | index("bin/libonnxruntime.so.1.29.0") != null and index("bin/LICENSE.onnxruntime") != null and index("bin/ThirdPartyNotices.onnxruntime.txt") != null'
           test "$(find .omnidist/default/dist/linux -mindepth 1 -maxdepth 1 -type d -printf '%f\n')" = amd64
           test "$(cat .omnidist/default/dist/VERSION)" = "$OMNIDIST_VERSION"
           .omnidist/default/dist/linux/amd64/layajev --help >/dev/null

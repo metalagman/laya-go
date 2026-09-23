@@ -646,6 +646,29 @@ tasks:
     cmds:
       - go list -m all
 
+  package:npm-native:
+    desc: Add the pinned local ONNX Runtime library and notices to the staged linux/x64 npm package.
+    preconditions:
+      - sh: test -n "${LAYA_ONNXRUNTIME_DISTRIBUTION:-}" && test -n "${OMNIDIST_VERSION:-}"
+        msg: "Set LAYA_ONNXRUNTIME_DISTRIBUTION and OMNIDIST_VERSION before staging native npm assets."
+      - sh: test -f .omnidist/default/npm/@metalagman/layajev-linux-x64/package.json
+        msg: "Run omnidist stage before package:npm-native."
+    cmds:
+      - |
+        set -eu
+        source_dir="${LAYA_ONNXRUNTIME_DISTRIBUTION}"
+        package_dir=".omnidist/default/npm/@metalagman/layajev-linux-x64"
+        bin_dir="$package_dir/bin"
+        test "$(jq -r .version "$package_dir/package.json")" = "${OMNIDIST_VERSION}"
+        test ! -e "$bin_dir/libonnxruntime.so.1.29.0"
+        echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $source_dir/lib/libonnxruntime.so.1.29.0" | sha256sum --check --status
+        echo "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c  $source_dir/LICENSE" | sha256sum --check --status
+        echo "53d3fa5821ac016ac24dd35775c996efec86e2ae0841e9a3a5e146c0ae916845  $source_dir/ThirdPartyNotices.txt" | sha256sum --check --status
+        install -m 0644 "$source_dir/lib/libonnxruntime.so.1.29.0" "$bin_dir/libonnxruntime.so.1.29.0"
+        install -m 0644 "$source_dir/LICENSE" "$bin_dir/LICENSE.onnxruntime"
+        install -m 0644 "$source_dir/ThirdPartyNotices.txt" "$bin_dir/ThirdPartyNotices.onnxruntime.txt"
+        echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $bin_dir/libonnxruntime.so.1.29.0" | sha256sum --check --status
+
   package:verify:
     desc: Verify committed v0.1 source/package contents, licenses, scope, size, secrets, and protected paths.
     env:

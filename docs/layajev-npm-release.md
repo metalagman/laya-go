@@ -4,10 +4,11 @@ The omnidist profile stages two MIT-licensed npm packages, `@metalagman/layajev`
 and its optional platform package `@metalagman/layajev-linux-x64`. Only
 `linux/amd64` with the pinned native build has been qualified. There is no
 Darwin, Windows, ARM, musl, or general Linux compatibility claim. Neither npm
-package contains model weights, ONNX Runtime, or a Python inference service.
-The 1.3 GiB FP32 bundle and the pinned native runtime remain
-deployment-owned inputs. The present workflow only builds a candidate; it does
-not publish either package.
+package contains model weights or a Python inference service. Starting with
+version 0.2.2, the platform package includes the checksum-pinned ONNX Runtime
+shared library, its MIT license, and third-party notices. The 1.3 GiB FP32
+bundle remains a deployment-owned input. The present workflow only builds a
+candidate; it does not publish either package.
 
 ## Run a published package
 
@@ -15,18 +16,20 @@ After a release has actually appeared on npm, use its exact version on a
 compatible `linux/amd64` host:
 
 ```sh
-export LAYAJEV_VERSION=0.2.0 # replace with the version actually published
+export LAYAJEV_VERSION=0.2.2 # or a newer version with packaged ONNX Runtime
 export LAYA_BUNDLE_DIR=/absolute/path/to/verified-bundle
-export LAYA_ONNXRUNTIME_LIBRARY=/absolute/path/to/libonnxruntime.so.1.29.0
-export LAYA_TOKENIZERS_LIBRARY=/absolute/path/to/libtokenizers.a
 export ORT_DISABLE_TELEMETRY=1
 npx -y "@metalagman/layajev@$LAYAJEV_VERSION" serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
-The tokenizer archive is linked into the packaged binary at build time, but
-the runtime still requires the reviewed `LAYA_TOKENIZERS_LIBRARY` path. The
-ONNX Runtime shared library, local bundle, and telemetry setting are also
+The tokenizer archive is linked into the packaged binary at build time; no
+tokenizer-library path is needed at runtime. The command finds the packaged
+ONNX Runtime library beside its executable. An explicitly set
+`LAYA_ONNXRUNTIME_LIBRARY` overrides that path and must still pass the pinned
+size and SHA-256 checks. The local bundle and telemetry setting remain
 required. `CGO_LDFLAGS` is only a build-time setting, not a consumer setting.
+Versions 0.2.0 and 0.2.1 do not package ONNX Runtime and require the explicit
+library path.
 See [native dependencies](https://github.com/metalagman/laya-go/blob/main/docs/native-dependencies.md) for pinned library identities
 and [source-checkout operations](https://github.com/metalagman/laya-go/blob/main/docs/layajev-runbook.md) for the Jev-compatible
 subset, HTTP examples, and safe binding rules. The default server listens on
