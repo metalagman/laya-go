@@ -24,6 +24,17 @@ func newServeCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use: "serve", Short: "Serve an already-local verified bundle",
 		RunE: func(cmd *cobra.Command, _ []string) error {
+			if os.Getenv("LAYA_ONNXRUNTIME_LIBRARY") == "" {
+				executable, err := os.Executable()
+				if err != nil {
+					return fmt.Errorf("serve: locate executable: %w", err)
+				}
+				if library := packagedONNXRuntimeLibrary(executable); library != "" {
+					if err := os.Setenv("LAYA_ONNXRUNTIME_LIBRARY", library); err != nil {
+						return fmt.Errorf("serve: configure packaged ONNX Runtime: %w", err)
+					}
+				}
+			}
 			return Serve(cmd.Context(), cfg)
 		},
 	}
@@ -33,6 +44,15 @@ func newServeCommand() *cobra.Command {
 	command.Flags().IntVar(&cfg.QueueSize, "queue-size", 16, "maximum waiting local inference requests")
 	_ = command.MarkFlagRequired("bundle")
 	return command
+}
+
+func packagedONNXRuntimeLibrary(executable string) string {
+	path := filepath.Join(filepath.Dir(executable), "libonnxruntime.so.1.29.0")
+	info, err := os.Stat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		return ""
+	}
+	return path
 }
 
 func newFetchCommand() *cobra.Command {

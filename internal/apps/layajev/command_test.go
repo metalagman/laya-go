@@ -37,6 +37,31 @@ func TestCommandHelp(t *testing.T) {
 	}
 }
 
+func TestPackagedONNXRuntimeLibrary(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	executable := filepath.Join(dir, "layajev")
+	library := filepath.Join(dir, "libonnxruntime.so.1.29.0")
+	if got := packagedONNXRuntimeLibrary(executable); got != "" {
+		t.Errorf("missing packaged library = %q, want empty", got)
+	}
+	if err := os.Mkdir(library, 0o755); err != nil {
+		t.Fatalf("create library directory: %v", err)
+	}
+	if got := packagedONNXRuntimeLibrary(executable); got != "" {
+		t.Errorf("directory packaged library = %q, want empty", got)
+	}
+	if err := os.Remove(library); err != nil {
+		t.Fatalf("remove library directory: %v", err)
+	}
+	if err := os.WriteFile(library, []byte("test library"), 0o644); err != nil {
+		t.Fatalf("create library file: %v", err)
+	}
+	if got := packagedONNXRuntimeLibrary(executable); got != library {
+		t.Errorf("packaged library = %q, want %q", got, library)
+	}
+}
+
 func TestFetchPinned(t *testing.T) {
 	t.Parallel()
 	content := []byte("official pinned artifact")
