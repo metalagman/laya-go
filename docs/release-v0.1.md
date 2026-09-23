@@ -1,9 +1,12 @@
-# v0.1 release preparation
+# v0.1 release runbook
 
-Version `0.1.0` is an unreleased candidate for
-`github.com/metalagman/laya-go`. Source commits and review branches may be
-published, but a tag, GitHub Release, or package publication requires the
-applicable release gates and review to pass.
+Version `0.1.0` is the first source-only release of
+`github.com/metalagman/laya-go`. Tagging, GitHub Release creation, and package
+publication require the applicable release gates and review to pass. The
+[hosted native qualification run](https://github.com/metalagman/laya-go/actions/runs/35848824434)
+checks the pinned linux/amd64 FP32 configuration from a clean committed
+checkout; its bundle is built on the disposable runner from digest-verified
+official Hugging Face inputs through `task bundle:export` and is not published.
 
 Run `task release:sbom` to print the exact Go module inventory (not a formal
 SBOM), `task package:verify` to audit committed repository contents, and `task

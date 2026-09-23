@@ -1,20 +1,22 @@
 # Qualification v1
 
-## Local candidate evidence boundary
+## Pinned linux/amd64 evidence boundary
 
-The current local evidence covers only the reviewed linux/amd64 FP32 native
-candidate with ONNX Runtime 1.29.0, the local tokenizer archive, and bundle
+The v0.1.0 evidence covers only the reviewed linux/amd64 FP32 native
+configuration with ONNX Runtime 1.29.0, the pinned tokenizer archive, and bundle
 `sha256:963bc035d885e0463ea1d7d54906cadf0e2a3a41073e131921800ea5cc358935`.
 Frozen multilingual/boundary preprocessing, tensor, numeric, and typed-result
 parity pass the committed tolerances. Directory, HF snapshot-link, fs.FS,
 native lifecycle, cancellation, race, RSS cleanup, ADK, and application example
 gates pass offline.
 
-This is not yet an advertised supported-platform claim: the native GitHub
-Actions job has not completed against a clean committed checkout. The
-`Native qualification` workflow is manual, runs only for `main`, and uses a
-GitHub-hosted runner. It fetches the exact pinned official checkpoint files
-from Hugging Face and the pinned reference SDK archive from GitHub, verifies
+The [clean-checkout native qualification run](https://github.com/metalagman/laya-go/actions/runs/35848824434)
+passed on a GitHub-hosted Ubuntu 24.04 linux/amd64 runner. This is evidence
+for the exact pinned configuration, not a blanket claim for Linux distributions
+or untested environments. The `Native qualification` workflow is manual,
+runs only for `main`, and uses a GitHub-hosted runner. It fetches the exact
+pinned official checkpoint files from Hugging Face and the pinned reference
+SDK archive from GitHub, verifies
 their digests, then runs `task bundle:export` with the locked build-time tools
 and network disabled. It verifies the resulting logical bundle ID and obtains
 the two native libraries from their pinned official release archives. Archive
@@ -73,6 +75,12 @@ on the same EliteBook measured Runtime open 38.581 ms, Model open 3059.707 ms,
 loaded RSS 634 MiB, queue admission delay 29.419 ms with a 25 ms hold, p50
 111.912 ms, p95 181.740 ms, and 8.914 sequential predictions/s. This is
 another local observation, not a deployment capacity claim.
+
+The clean-checkout GitHub-hosted Ubuntu 24.04 runner (4 logical CPUs) measured
+Runtime open 36.356 ms, Model open 2299.804 ms, loaded RSS 634 MiB, queue
+admission delay 25.586 ms with a 25 ms hold, p50 40.321 ms, p95 42.373 ms,
+and 24.554 sequential predictions/s. This is runner-local evidence only;
+it does not establish deployment latency or throughput.
 
 ## Application quality status
 
