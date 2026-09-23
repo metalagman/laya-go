@@ -6,14 +6,14 @@ runtime and model ownership, ordered results, and caller-controlled model
 sources.
 
 This repository provides the public API, strict bundle contract and verifier,
-locked official exporter, frozen parity corpus, and a reviewed native-runtime
-candidate. An ordinary build has no native dependency and `NewRuntime` returns
+locked official exporter, frozen parity corpus, and a pinned native-runtime
+configuration. An ordinary build has no native dependency and `NewRuntime` returns
 `ErrNativeUnavailable`. A build made explicitly with `laya_native` and cgo can
 open a complete local bundle and run in-process ONNX Runtime inference when the
 pinned native libraries are supplied by the application environment.
 
-The native path and source handling are compatibility evidence for the pinned
-linux/amd64 artifacts, not a general platform-support or release claim. The
+The v0.1.0 native qualification applies only to the pinned linux/amd64 FP32
+artifacts and bundle; it is not a general platform-support claim. The
 optional `adklaya` package supplies typed local-inference nodes and deterministic
 choice routing for official Google ADK Go v2.4.0 workflows.
 
