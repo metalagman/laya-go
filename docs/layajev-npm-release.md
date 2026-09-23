@@ -22,6 +22,12 @@ export ORT_DISABLE_TELEMETRY=1
 npx -y "@metalagman/layajev@$LAYAJEV_VERSION" serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
+Starting with the next release after 0.2.2, check an installed package before
+supplying a model with
+`npx -y "@metalagman/layajev@$LAYAJEV_VERSION" doctor`. It initializes and
+closes the packaged native runtime, but does not validate a model or the HTTP
+API.
+
 The tokenizer archive is linked into the packaged binary at build time; no
 tokenizer-library path is needed at runtime. The command finds the packaged
 ONNX Runtime library beside its executable. An explicitly set
@@ -61,10 +67,16 @@ repository's `task check` plus protected native qualification with the
 required external artifacts before making support claims.
 
 The trusted manual workflow `.github/workflows/omnidist-release.yml` accepts a
-version on `main`, acquires only the checksum-pinned build-time tokenizer
-archive, and performs `build`, `stage`, and `verify`. It uploads staged npm
-directories for seven days. It has read-only repository permission and no npm
-publish token. A maintainer may start it with:
+version on `main`, acquires only the checksum-pinned native archives, and
+performs `build`, `stage`, and `verify`. Before upload, it packs both staged
+packages, installs them together in a clean offline npm project, runs the
+installed CLI, and checks that the packaged ONNX Runtime opens and closes.
+The protected native qualification workflow repeats that installation and also
+starts the installed server with its verified disposable bundle, queries
+`GET /v1/models`, and makes one `POST /v1/systemone` prediction. Neither
+workflow publishes. Candidate packages are retained for seven days; the
+release workflow has read-only repository permission and no npm publish token.
+A maintainer may start it with:
 
 ```sh
 gh workflow run omnidist-release.yml --ref main -f version=0.2.0-rc.0

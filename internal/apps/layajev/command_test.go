@@ -30,7 +30,7 @@ func TestCommandHelp(t *testing.T) {
 	if err := command.ExecuteContext(context.Background()); err != nil {
 		t.Fatalf("Execute help: %v", err)
 	}
-	for _, subcommand := range []string{"serve", "fetch", "convert"} {
+	for _, subcommand := range []string{"serve", "doctor", "fetch", "convert"} {
 		if !strings.Contains(output.String(), subcommand) {
 			t.Errorf("help missing %q: %s", subcommand, output.String())
 		}
