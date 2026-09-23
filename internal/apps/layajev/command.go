@@ -47,7 +47,7 @@ func newFetchCommand() *cobra.Command {
 			return fetchPinned(cmd.Context(), profile, destination, nil)
 		},
 	}
-	command.Flags().StringVar(&repositoryRoot, "repository-root", ".", "laya-go checkout containing the pinned export profile")
+	command.Flags().StringVar(&repositoryRoot, "repository-root", "", "optional laya-go checkout whose pinned export profile overrides the embedded profile")
 	command.Flags().StringVar(&destination, "destination", "", "new directory for the verified source snapshot")
 	_ = command.MarkFlagRequired("destination")
 	return command

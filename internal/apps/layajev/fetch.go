@@ -3,6 +3,7 @@ package layajev
 import (
 	"context"
 	"crypto/sha256"
+	_ "embed"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -19,8 +20,10 @@ import (
 const (
 	officialModelID  = "convaiinnovations/laya-multilingual"
 	officialRevision = "052592a15d198d9ad47da779604259b10b47b7aa"
-	profilePath      = "tools/export/profiles/laya-multilingual-v1.json"
 )
+
+//go:embed pinned-source.json
+var pinnedSourceProfile []byte
 
 type sourceFile struct {
 	Path   string `json:"path"`
@@ -37,10 +40,14 @@ type pinnedProfile struct {
 }
 
 func loadPinnedProfile(repositoryRoot string) (pinnedProfile, error) {
-	path := filepath.Join(repositoryRoot, filepath.FromSlash(profilePath))
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return pinnedProfile{}, fmt.Errorf("fetch: read pinned profile: %w", err)
+	data := pinnedSourceProfile
+	if repositoryRoot != "" {
+		path := filepath.Join(repositoryRoot, "tools", "export", "profiles", "laya-multilingual-v1.json")
+		var err error
+		data, err = os.ReadFile(path)
+		if err != nil {
+			return pinnedProfile{}, fmt.Errorf("fetch: read pinned profile: %w", err)
+		}
 	}
 	var profile pinnedProfile
 	if err := json.Unmarshal(data, &profile); err != nil {
