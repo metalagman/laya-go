@@ -180,6 +180,32 @@ def compare_runtime(model, graph: Path) -> dict[str, float]:
     return result
 
 
+def exporter_git_revision(repository_root: Path) -> str:
+    """Return the last committed exporter revision, independent of later docs."""
+
+    paths = ("tools/export/src/laya_export", "tools/export/sdk_probe.py")
+    command = ["git", "-C", str(repository_root)]
+    status = subprocess.run(
+        [*command, "status", "--porcelain", "--untracked-files=all", "--", *paths],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    ).stdout
+    if status:
+        raise ValueError("exporter sources must be committed before export")
+    revision = subprocess.run(
+        [*command, "log", "-1", "--format=%H", "--", *paths],
+        check=True,
+        capture_output=True,
+        text=True,
+        timeout=15,
+    ).stdout.strip()
+    if len(revision) != 40 or any(character not in "0123456789abcdef" for character in revision):
+        raise ValueError("exporter sources have no committed Git revision")
+    return revision
+
+
 def build_manifest(
     profile_path: Path,
     profile: dict[str, Any],
@@ -219,13 +245,7 @@ def build_manifest(
     ]
     exporter_files.append("tools/export/sdk_probe.py")
     exporter_digest = framed_digest(repository_root, exporter_files)
-    git_revision = subprocess.run(
-        ["git", "-C", str(repository_root), "rev-parse", "HEAD"],
-        check=True,
-        capture_output=True,
-        text=True,
-        timeout=15,
-    ).stdout.strip()
+    git_revision = exporter_git_revision(repository_root)
     created = datetime.fromtimestamp(epoch, UTC).isoformat().replace("+00:00", "Z")
     return {
         "schema_version": 1,
