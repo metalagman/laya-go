@@ -34,8 +34,9 @@ test -x "$installed"
 test -f "$consumer/node_modules/@metalagman/layajev-linux-x64/bin/libonnxruntime.so.1.29.0"
 env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
   "$installed" --help >/dev/null
-env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
-  ORT_DISABLE_TELEMETRY=1 "$installed" doctor | rg -x 'native runtime OK'
+doctor_output="$(env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
+  ORT_DISABLE_TELEMETRY=1 "$installed" doctor)"
+test "$doctor_output" = 'native runtime OK'
 
 if [[ -z "${LAYA_BUNDLE_DIR:-}" ]]; then
   echo 'Installed npm packages and initialized the bundled native runtime.'
