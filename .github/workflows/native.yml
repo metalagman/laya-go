@@ -23,6 +23,9 @@ jobs:
     steps:
       - name: Check out committed sources
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Bundle provenance names the last exporter-source commit, not HEAD.
+          fetch-depth: 0
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
@@ -63,6 +66,8 @@ jobs:
           command -v strings
           command -v sha256sum
           command -v jq
+          test "$(git rev-parse --is-shallow-repository)" = false
+          test "$(git log -1 --format=%H -- tools/export/src/laya_export tools/export/sdk_probe.py)" = b61873c061ae62e52f4e0a6dc6fdafb6ffe88a88
 
       - name: Acquire and verify pinned official export inputs
         shell: bash
