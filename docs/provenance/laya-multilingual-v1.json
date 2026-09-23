@@ -1,0 +1,25 @@
+{
+  "record_version": 1,
+  "profile": "laya-multilingual-v1",
+  "verified_at": "2026-09-22T00:00:00Z",
+  "source_model": {
+    "id": "convaiinnovations/laya-multilingual",
+    "revision": "052592a15d198d9ad47da779604259b10b47b7aa",
+    "declared_license": "Apache-2.0",
+    "redistribution_review": "required-before-publication"
+  },
+  "reference_sdk": {
+    "repository": "NandhaKishorM/laya",
+    "revision": "573e5b62696ba441230cd6be71d593331b5d23af",
+    "version": "0.3.5",
+    "declared_license": "Apache-2.0"
+  },
+  "authoritative_file_identity": "tools/export/profiles/laya-multilingual-v1.json",
+  "supported_derivation": "official-source-to-laya-go-exporter-to-bundle-v1",
+  "required_bundle_notices": [
+    "LICENSE.model",
+    "NOTICE.model",
+    "LICENSE.sdk",
+    "NOTICE.sdk"
+  ]
+}

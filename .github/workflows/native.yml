@@ -1,0 +1,119 @@
+name: Native qualification
+
+# Explicit trusted-operator run. Public pull requests never execute supplied
+# native artifacts or run on a persistent self-hosted machine.
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_url:
+        description: Public HTTPS URL of a root-layout, complete bundle .tar.gz
+        required: true
+        type: string
+      bundle_sha256:
+        description: SHA-256 of that exact bundle archive
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  native-linux-amd64:
+    name: Pinned linux/amd64 native gates
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    env:
+      GOTOOLCHAIN: local
+      CGO_ENABLED: "1"
+      BUNDLE_URL: ${{ inputs.bundle_url }}
+      BUNDLE_SHA256: ${{ inputs.bundle_sha256 }}
+      ONNXRUNTIME_URL: https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-x64-1.29.0.tgz
+      TOKENIZERS_URL: https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz
+    steps:
+      - name: Check out committed sources
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Go
+        uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version: 1.26.6
+          cache: false
+
+      - name: Install runner audit tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
+
+      - name: Install pinned quality tools and module dependencies
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.53.1
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.13.2
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          modfile="$RUNNER_TEMP/laya-ci.mod"
+          cp go.mod "$modfile"
+          cp go.sum "${modfile%.mod}.sum"
+          go mod download -modfile="$modfile" all
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+
+      - name: Validate public artifact inputs before download
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in BUNDLE_URL ONNXRUNTIME_URL TOKENIZERS_URL; do
+            url="${!name}"
+            case "$url" in https://*) ;; *) echo "$name must be a public HTTPS URL" >&2; exit 1;; esac
+            case "$url" in *'@'*|*'?'*|*'#'*) echo "$name must contain no credentials or query tokens" >&2; exit 1;; esac
+          done
+          if ! rg -q '^[a-f0-9]{64}$' <<< "$BUNDLE_SHA256"; then
+            echo "bundle archive SHA-256 must be exactly 64 lowercase hex characters" >&2
+            exit 1
+          fi
+          command -v nm
+          command -v strings
+          command -v sha256sum
+          command -v jq
+
+      - name: Download and verify reviewed native inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact_root="$RUNNER_TEMP/laya-native-ci"
+          mkdir -m 700 "$artifact_root"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/bundle.tar.gz" "$BUNDLE_URL"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/onnxruntime.tgz" "$ONNXRUNTIME_URL"
+          curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/tokenizers.tar.gz" "$TOKENIZERS_URL"
+          echo "$BUNDLE_SHA256  $artifact_root/bundle.tar.gz" | sha256sum --check --status
+          echo "c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba  $artifact_root/onnxruntime.tgz" | sha256sum --check --status
+          echo "72556cdca798dd4ea7cdaba308e5f0d68a8cb93b67c96edf485b7a0edd7b07f4  $artifact_root/tokenizers.tar.gz" | sha256sum --check --status
+          tar -xzf "$artifact_root/onnxruntime.tgz" -C "$artifact_root" onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0
+          tar -xzf "$artifact_root/tokenizers.tar.gz" -C "$artifact_root" libtokenizers.a
+          echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" | sha256sum --check --status
+          echo "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50  $artifact_root/libtokenizers.a" | sha256sum --check --status
+          python3 scripts/ci-unpack-bundle.py "$artifact_root/bundle.tar.gz" "$artifact_root/bundle"
+          actual="$(go run ./internal/cmd/bundlecheck "$artifact_root/bundle")"
+          jq -e --arg expected 'sha256:b3d35e00b0689988dff23f0eeed8721f10cce2c3a10d720f6c7d42cfc7d8c4de' '.bundle_id == $expected' <<< "$actual"
+          mkdir -m 700 "$artifact_root/embed-work"
+          echo "LAYA_ONNXRUNTIME_LIBRARY=$artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" >> "$GITHUB_ENV"
+          echo "LAYA_TOKENIZERS_LIBRARY=$artifact_root/libtokenizers.a" >> "$GITHUB_ENV"
+          echo "LAYA_BUNDLE_DIR=$artifact_root/bundle" >> "$GITHUB_ENV"
+          echo "LAYA_EMBED_WORKDIR=$artifact_root/embed-work" >> "$GITHUB_ENV"
+
+      - name: Run complete protected gates offline
+        env:
+          GOPROXY: "off"
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+          ORT_DISABLE_TELEMETRY: "1"
+          HTTP_PROXY: "http://127.0.0.1:1"
+          HTTPS_PROXY: "http://127.0.0.1:1"
+          ALL_PROXY: "http://127.0.0.1:1"
+          NO_PROXY: ""
+        run: |
+          task setup:native
+          task native:integration
+          task source:integration
+          task adk:integration
+          task example:integration
+          task bundle:materialize-embedded
+          task test:embedded:race
+          task qualification:gate

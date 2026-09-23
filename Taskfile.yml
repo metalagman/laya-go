@@ -1,0 +1,781 @@
+version: "3"
+
+vars:
+  GO_VERSION: 1.26.6
+  TASK_VERSION: v3.53.1
+  GOLANGCI_LINT_VERSION: v2.13.2
+  GOVULNCHECK_VERSION: v1.1.4
+
+env:
+  GOCACHE: "{{.ROOT_DIR}}/.cache/go-build"
+  GOLANGCI_LINT_CACHE: "{{.ROOT_DIR}}/.cache/golangci-lint"
+
+tasks:
+  default:
+    desc: List repository operations.
+    cmds:
+      - task: help
+
+  help:
+    desc: List repository operations and their effects.
+    cmds:
+      - task --list
+
+  fmt:
+    desc: Check Go formatting without changing files.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - |
+        files="$(gofmt -l .)"
+        if [ -n "$files" ]; then
+          echo "Go files require formatting:"
+          echo "$files"
+          exit 1
+        fi
+
+  tidy:
+    desc: Check go.mod/go.sum tidiness without changing files.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go mod tidy -diff
+
+  verify:
+    desc: Verify module content and load every package.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go mod verify
+      - go list ./...
+
+  setup:platform:
+    desc: Check the declared linux/amd64 Go/cgo toolchain without installing or downloading anything.
+    cmds:
+      - test "$(go env GOOS)/$(go env GOARCH)" = "linux/amd64"
+      - test "$(go env CGO_ENABLED)" = "1"
+      - go version
+      - command -v go
+      - command -v nm
+      - command -v sha256sum
+      - GOTOOLCHAIN=local GOPROXY=off go list ./... > /dev/null
+
+  setup:native:
+    desc: Check the supported platform and authenticate already-local native libraries and bundle.
+    cmds:
+      - task: setup:platform
+      - task: native:verify
+
+  preflight:tracked:
+    desc: Fail if release inputs are untracked or the checkout differs from its committed tree.
+    cmds:
+      - |
+        for file in go.mod go.sum Taskfile.yml README.md LICENSE VERSION .github/workflows/ci.yml adklaya/routing.go qualification_linux_test.go tools/embedprobe/main.go; do
+          git ls-files --error-unmatch -- "$file" >/dev/null || { echo "required release input is not tracked: $file"; exit 1; }
+        done
+        untracked="$(git ls-files --others --exclude-standard)"
+        if [ -n "$untracked" ]; then
+          echo "untracked release inputs:"
+          echo "$untracked"
+          exit 1
+        fi
+        git diff --quiet && git diff --cached --quiet || { echo "checkout differs from committed tree"; exit 1; }
+
+  bundle:contract:
+    desc: Verify the strict bundle schema, parser, compatibility, and source-neutral layouts.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go test ./internal/bundle
+
+  reference:test:
+    desc: Run locked hermetic tests for the offline Python reference transformations.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv is required for the isolated build-time reference project."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/reference-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+    cmds:
+      - uv run --project tools/export --offline --frozen --no-sync python -m unittest discover -s tools/export/tests -v
+
+  reference:fixture:
+    desc: Print deterministic synthetic reference observations; does not write artifacts.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv is required for the isolated build-time reference project."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/reference-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+    cmds:
+      - uv run --project tools/export --offline --frozen --no-sync python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json fixture
+
+  reference:verify:
+    desc: Verify the committed synthetic parity corpus hermetically; uses no Python, model, native runtime, or network.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go test ./internal/parity
+
+  reference:generate:
+    desc: Regenerate one selected parity corpus from explicit verified local inputs; loads the 1.3 GiB FP32 bundle and never downloads.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv and the locked exporter environment are required."
+      - sh: test -n "${LAYA_SOURCE_DIR:-}" && test -n "${LAYA_SDK_DIR:-}" && test -n "${LAYA_BUNDLE_DIR:-}" && test -n "${LAYA_FIXTURE_OUTPUT:-}"
+        msg: "Set LAYA_SOURCE_DIR, LAYA_SDK_DIR, LAYA_BUNDLE_DIR, and LAYA_FIXTURE_OUTPUT."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/export-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    cmds:
+      - go run ./internal/cmd/bundlecheck "${LAYA_BUNDLE_DIR}"
+      - uv run --project tools/export --offline --frozen python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json corpus --source "${LAYA_SOURCE_DIR}" --sdk "${LAYA_SDK_DIR}" --bundle "${LAYA_BUNDLE_DIR}" --repository-root "{{.ROOT_DIR}}" --output "${LAYA_FIXTURE_OUTPUT}"
+
+  reference:verify-source:
+    desc: Verify an explicit local official checkpoint snapshot; reads only LAYA_SOURCE_DIR.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv is required for the isolated build-time reference project."
+      - sh: test -n "${LAYA_SOURCE_DIR:-}"
+        msg: "Set LAYA_SOURCE_DIR to the immutable official checkpoint snapshot."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/reference-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+    cmds:
+      - uv run --project tools/export --offline --frozen --no-sync python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json verify-source --source "${LAYA_SOURCE_DIR}"
+
+  reference:verify-sdk:
+    desc: Compare reference semantics with an explicit verified pinned SDK worktree; reads only LAYA_SDK_DIR.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv is required for the isolated build-time reference project."
+      - sh: test -n "${LAYA_SDK_DIR:-}" && test -n "${LAYA_SDK_PYTHON:-}"
+        msg: "Set LAYA_SDK_DIR and LAYA_SDK_PYTHON for the pinned SDK worktree and its locked Python."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/reference-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    cmds:
+      - uv run --project tools/export --offline --frozen --no-sync python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json compare-sdk --sdk "${LAYA_SDK_DIR}" --sdk-python "${LAYA_SDK_PYTHON}" --probe tools/export/sdk_probe.py
+
+  bundle:export:
+    desc: Export an official local checkpoint into a new atomic FP32 bundle; requires about 5 GiB free and never downloads or replaces output.
+    preconditions:
+      - sh: command -v uv >/dev/null 2>&1
+        msg: "uv and the locked exporter environment are required."
+      - sh: test -n "${LAYA_SOURCE_DIR:-}" && test -n "${LAYA_SDK_DIR:-}" && test -n "${LAYA_BUNDLE_DIR:-}" && test -n "${SOURCE_DATE_EPOCH:-}"
+        msg: "Set LAYA_SOURCE_DIR, LAYA_SDK_DIR, LAYA_BUNDLE_DIR, and SOURCE_DATE_EPOCH."
+    env:
+      UV_CACHE_DIR: "{{.ROOT_DIR}}/.cache/uv"
+      UV_PROJECT_ENVIRONMENT: "{{.ROOT_DIR}}/.cache/export-venv"
+      UV_OFFLINE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+      PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+    cmds:
+      - go build -o .cache/bundlecheck ./internal/cmd/bundlecheck
+      - uv run --project tools/export --offline --frozen python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json export --source "${LAYA_SOURCE_DIR}" --sdk "${LAYA_SDK_DIR}" --output "${LAYA_BUNDLE_DIR}" --epoch "${SOURCE_DATE_EPOCH}" --repository-root "{{.ROOT_DIR}}" --verifier "{{.ROOT_DIR}}/.cache/bundlecheck"
+
+  bundle:verify:
+    desc: Verify an explicit complete local bundle without mutation or network access.
+    preconditions:
+      - sh: test -n "${LAYA_BUNDLE_DIR:-}"
+        msg: "Set LAYA_BUNDLE_DIR to a complete prepared bundle."
+    cmds:
+      - go run ./internal/cmd/bundlecheck "${LAYA_BUNDLE_DIR}"
+
+  native:verify:
+    desc: Verify explicitly supplied pinned linux/amd64 native artifacts and complete bundle; never downloads.
+    preconditions:
+      - sh: test -n "${LAYA_ONNXRUNTIME_LIBRARY:-}" && test -n "${LAYA_TOKENIZERS_LIBRARY:-}" && test -n "${LAYA_BUNDLE_DIR:-}"
+        msg: "Set LAYA_ONNXRUNTIME_LIBRARY, LAYA_TOKENIZERS_LIBRARY, and LAYA_BUNDLE_DIR to already-local inputs."
+      - sh: command -v nm >/dev/null 2>&1 && command -v sha256sum >/dev/null 2>&1 && command -v rg >/dev/null 2>&1
+        msg: "nm, sha256sum, and rg are required for native artifact verification."
+    cmds:
+      - scripts/verify-native-artifacts.sh
+      - go run ./internal/cmd/bundlecheck "${LAYA_BUNDLE_DIR}"
+
+  native:ci:contract:
+    desc: Test the build-time CI bundle extractor against regular, escaping, linked, and duplicate archive entries.
+    cmds:
+      - PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_ci_unpack_bundle.py -v
+
+  native:scan:
+    desc: Prove native production code has no acquisition, network-client, Python, or child-process dependencies.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - |
+        if rg -n 'net/http|os/exec|FromPretrained|Authorization|WithAuthToken|WithCacheDir' internal/native/tokenizer --glob '*.go' --glob '*.h'; then
+          echo "forbidden acquisition capability found in local tokenizer binding"
+          exit 1
+        fi
+      - |
+        if go list -deps -tags=laya_native ./internal/native/tokenizer | rg -x 'net/http|os/exec'; then
+          echo "forbidden acquisition or process package found in local tokenizer dependency graph"
+          exit 1
+        fi
+      - |
+        if go list -deps -tags=laya_native . | rg -x 'net/http|os/exec|google.golang.org/grpc'; then
+          echo "forbidden network-client or process package found in native production dependency graph"
+          exit 1
+        fi
+      - |
+        if rg -n 'python|hugging[[:space:]_-]*face|FromPretrained|download|provider[[:space:]_-]*registry' --ignore-case \
+          native_*.go internal/native/tokenizer --glob '*.go' --glob '*.h'; then
+          echo "forbidden acquisition, Python, or provider capability found in native production sources"
+          exit 1
+        fi
+      - |
+        if rg -n '"net/http"|"os/exec"|google\.golang\.org/grpc|exec\.Command|http\.(Client|NewRequest)' \
+          native_*.go runtime.go internal/source internal/native --glob '*.go' --glob '!**/*_test.go'; then
+          echo "forbidden network-client or child-process capability found in production source handling"
+          exit 1
+        fi
+
+  source:contract:
+    desc: Verify directory, HF snapshot-link, fs.FS staging, publication, recovery, and lease contracts without native artifacts.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - go test ./internal/source ./internal/bundle
+      - go test -race ./internal/source ./internal/bundle
+
+  source:audit:
+    desc: Audit source APIs, offline dependencies, docs, licenses, secrets, large files, and protected paths; never acquires artifacts.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - task: source:contract
+      - task: native:scan
+      - go test ./...
+      - |
+        modules="$(go list -m all)"
+        echo "$modules" | rg -x 'github.com/metalagman/laya-go'
+        echo "$modules" | rg -x 'github.com/yalue/onnxruntime_go v1\.36\.0'
+        echo "$modules" | rg -x 'golang.org/x/sys v0\.48\.0'
+        echo "$modules" | rg -x 'google.golang.org/adk/v2 v2\.4\.0'
+        echo "$modules" | rg -x 'github.com/google/jsonschema-go v0\.4\.3'
+        module_cache="$(go env GOMODCACHE)"
+        test -f "$module_cache/github.com/yalue/onnxruntime_go@v1.36.0/LICENSE"
+        test -f "$module_cache/golang.org/x/sys@v0.48.0/LICENSE"
+        test -f "$module_cache/google.golang.org/adk/v2@v2.4.0/LICENSE"
+        test -f "$module_cache/github.com/google/jsonschema-go@v0.4.3/LICENSE"
+      - |
+        if rg -n 'type [A-Za-z0-9_]*(Provider|Downloader|CacheManager)|func [A-Za-z0-9_]*(Download|Authenticate|ResolveRevision)' \
+          --glob '*.go' --glob '!**/*_test.go' .; then
+          echo "provider acquisition API found in production Go sources"
+          exit 1
+        fi
+      - |
+        if rg -n '(-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,})' \
+          --hidden --glob '!Taskfile.yml' --glob '!.git/**' --glob '!.beads/**' --glob '!.cache/**' --glob '!pack/callee/**' .; then
+          echo "possible committed secret found"
+          exit 1
+        fi
+      - |
+        large_files="$(find . \
+          -path './.git' -prune -o \
+          -path './.beads' -prune -o \
+          -path './.cache' -prune -o \
+          -path './pack/callee' -prune -o \
+          -type f -size +10M -print)"
+        if [ -n "$large_files" ]; then
+          echo "unexpected project file larger than 10 MiB:"
+          echo "$large_files"
+          exit 1
+        fi
+      - test -z "$(git status --short -- pack/callee)"
+      - git diff --check
+
+  source:gate:
+    desc: Run protected real source parity; needs about 4 GiB RAM and up to two bundle sizes of temp/work disk, and never downloads.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+      LAYA_PARITY_CORPUS: "{{.ROOT_DIR}}/internal/parity/testdata/corpus-v1.json"
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -count=1 -run '^TestProtectedSource' -v .
+        test ! -e ':memory:.ses'
+
+  source:gate:race:
+    desc: Repeat the protected source gate under race; needs about 4 GiB RAM and up to two bundle sizes of disk, and never downloads.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+      LAYA_PARITY_CORPUS: "{{.ROOT_DIR}}/internal/parity/testdata/corpus-v1.json"
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -race -tags=laya_native -count=1 -run '^TestProtectedSource' -v .
+        test ! -e ':memory:.ses'
+
+  source:integration:
+    desc: Run all protected source/race/native/RSS evidence; needs about 4 GiB RAM and up to two bundle sizes of disk.
+    cmds:
+      - task: source:gate
+      - task: source:gate:race
+      - task: native:integration
+
+  native:gate:
+    desc: Run the protected pinned native ABI, tokenizer, graph, parity-smoke, termination, and lifecycle gate.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      LAYA_PARITY_CORPUS: "{{.ROOT_DIR}}/internal/parity/testdata/corpus-v1.json"
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -count=1 -run '^(TestNative|TestModelAdmissionIsBoundedAndFIFO|TestModelQueueTimeout|TestModelQueuedCancellation|TestModelCloseRetainsResourcesUntilInferenceFinishes|TestRuntimeRefusesCloseWhileModelOpenIsInProgress)' -v ./...
+        test ! -e ':memory:.ses' && test ! -e internal/native/gate/':memory:.ses'
+
+  native:gate:race:
+    desc: Repeat the protected native compatibility gate under the Go race detector.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      LAYA_PARITY_CORPUS: "{{.ROOT_DIR}}/internal/parity/testdata/corpus-v1.json"
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -race -tags=laya_native -count=1 -run '^(TestNative|TestModelAdmissionIsBoundedAndFIFO|TestModelQueueTimeout|TestModelQueuedCancellation|TestModelCloseRetainsResourcesUntilInferenceFinishes|TestRuntimeRefusesCloseWhileModelOpenIsInProgress)' -v ./...
+        test ! -e ':memory:.ses' && test ! -e internal/native/gate/':memory:.ses'
+
+  native:stress:
+    desc: Repeat the real two-model lifecycle and bounded RSS cleanup smoke twice; requires about 4 GiB RAM.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags='laya_native laya_native_diagnostics' -count=2 -run '^TestProtectedNativeLifecycleStress$' -v .
+        test ! -e ':memory:.ses'
+
+  native:integration:
+    desc: Run protected real-bundle parity, cancellation, queue/lifecycle race, offline scans, and RSS cleanup evidence.
+    cmds:
+      - task: native:gate
+      - task: native:gate:race
+      - task: native:stress
+
+  adk:contract:
+    desc: Verify pinned ADK v2.4.0 behavior and adapter graphs hermetically under ordinary and race modes.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - go test ./internal/adkcontract ./adklaya
+      - go test -race ./internal/adkcontract ./adklaya
+      - |
+        modules="$(go list -m all)"
+        echo "$modules" | rg -x 'google.golang.org/adk/v2 v2\.4\.0'
+        module_cache="$(go env GOMODCACHE)"
+        test -f "$module_cache/google.golang.org/adk/v2@v2.4.0/LICENSE"
+
+  adk:audit:
+    desc: Audit the optional ADK adapter for local-only inference, lifecycle non-ownership, pinned modules, repository boundaries, and secrets.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - task: adk:contract
+      - |
+        if rg -n '"net/http"|"os/exec"|google\.golang\.org/grpc|exec\.Command|http\.(Client|NewRequest)' \
+          adklaya --glob '*.go' --glob '!**/*_test.go'; then
+          echo "forbidden network-client or child-process capability found in ADK adapter"
+          exit 1
+        fi
+      - |
+        if rg -n 'Download|Authenticate|ResolveRevision|OpenModel|NewRuntime|\.Close\(' \
+          adklaya --glob '*.go' --glob '!**/*_test.go'; then
+          echo "forbidden acquisition or lifecycle ownership found in ADK adapter"
+          exit 1
+        fi
+      - |
+        if rg -n '(-----BEGIN [A-Z ]*PRIVATE KEY-----|AKIA[0-9A-Z]{16}|gh[pousr]_[A-Za-z0-9]{20,})' \
+          --hidden --glob '!Taskfile.yml' --glob '!.git/**' --glob '!.beads/**' --glob '!.cache/**' --glob '!pack/callee/**' .; then
+          echo "possible committed secret found"
+          exit 1
+        fi
+      - test -z "$(git status --short -- pack/callee)"
+      - git diff --check
+
+  adk:gate:
+    desc: Run the protected real native ADK data and routing graph gate with network denied.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -count=1 -run '^TestProtectedNativeADKGraphs$' -v ./adklaya
+        test ! -e ':memory:.ses' && test ! -e adklaya/':memory:.ses'
+
+  adk:gate:race:
+    desc: Repeat the protected real native ADK graph gate under the Go race detector.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -race -tags=laya_native -count=1 -run '^TestProtectedNativeADKGraphs$' -v ./adklaya
+        test ! -e ':memory:.ses' && test ! -e adklaya/':memory:.ses'
+
+  adk:integration:
+    desc: Run protected ADK ordinary/race graphs and the native lifecycle cleanup stress gate.
+    cmds:
+      - task: adk:gate
+      - task: adk:gate:race
+      - task: native:stress
+
+  example:contract:
+    desc: Build and test directory, fs.FS, and ADK example compositions without native inputs.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - go test ./examples/...
+      - go test -race ./examples/...
+
+  example:audit:
+    desc: Audit example composition, content safety, local-only capability, repository boundaries, and docs.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - task: example:contract
+      - |
+        if rg -n '"net/http"|"os/exec"|google\.golang\.org/grpc|exec\.Command|http\.(Client|NewRequest)|Download|Authenticate|ResolveRevision' \
+          examples --glob '*.go'; then
+          echo "forbidden acquisition, network-client, or child-process capability found in examples"
+          exit 1
+        fi
+      - test -z "$(git status --short -- pack/callee)"
+      - git diff --check
+
+  example:gate:
+    desc: Run protected directory, fs.FS, and shared-model ADK examples with network denied.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -count=1 -run '^TestProtectedExamplesEndToEnd$' -v ./examples/e2e
+        test ! -e ':memory:.ses' && test ! -e examples/e2e/':memory:.ses'
+
+  example:gate:race:
+    desc: Repeat the protected end-to-end example gate under the Go race detector.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -race -tags=laya_native -count=1 -run '^TestProtectedExamplesEndToEnd$' -v ./examples/e2e
+        test ! -e ':memory:.ses' && test ! -e examples/e2e/':memory:.ses'
+
+  example:integration:
+    desc: Run hermetic audits and protected ordinary/race end-to-end examples.
+    cmds:
+      - task: example:audit
+      - task: example:gate
+      - task: example:gate:race
+
+  bundle:materialize-embedded:
+    desc: Compile a temporary real embed.FS bundle and test offline native materialization; removes only its own temporary module.
+    deps: [native:verify, native:scan]
+    preconditions:
+      - sh: test -n "${LAYA_EMBED_WORKDIR:-}" && test -d "${LAYA_EMBED_WORKDIR}"
+        msg: "Set LAYA_EMBED_WORKDIR to an existing absolute directory with room for the complete bundle and test binary."
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HF_HUB_OFFLINE: "1"
+      TRANSFORMERS_OFFLINE: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go run ./tools/embedprobe
+
+  test:embedded:race:
+    desc: Repeat real embed.FS native inference and invalid-bundle checks under the Go race detector.
+    cmds:
+      - LAYA_EMBED_RACE=1 task bundle:materialize-embedded
+
+  smoke:offline:
+    desc: Run real local, source, ADK, example and compile-time embedded inference with network denied.
+    cmds:
+      - task: native:gate
+      - task: source:gate
+      - task: adk:gate
+      - task: example:gate
+      - task: bundle:materialize-embedded
+
+  diagnose:native:
+    desc: Print platform/runtime identities and authenticate already-local native inputs without changing them.
+    cmds:
+      - task: setup:native
+      - go env GOOS GOARCH CGO_ENABLED GOVERSION
+      - sha256sum "${LAYA_ONNXRUNTIME_LIBRARY}" "${LAYA_TOKENIZERS_LIBRARY}"
+
+  profile:native:
+    desc: Write opt-in CPU/heap profiles and test binary to three explicit new absolute files.
+    deps: [native:verify, native:scan]
+    preconditions:
+      - sh: test -n "${LAYA_CPU_PROFILE:-}" && test -n "${LAYA_HEAP_PROFILE:-}" && test -n "${LAYA_PROFILE_BINARY:-}"
+        msg: "Set LAYA_CPU_PROFILE, LAYA_HEAP_PROFILE, and LAYA_PROFILE_BINARY to distinct new absolute file paths."
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+    cmds:
+      - |
+        umask 077
+        case "${LAYA_CPU_PROFILE}" in /*) ;; *) echo "CPU profile path must be absolute"; exit 1;; esac
+        case "${LAYA_HEAP_PROFILE}" in /*) ;; *) echo "heap profile path must be absolute"; exit 1;; esac
+        case "${LAYA_PROFILE_BINARY}" in /*) ;; *) echo "profile binary path must be absolute"; exit 1;; esac
+        test "${LAYA_CPU_PROFILE}" != "${LAYA_HEAP_PROFILE}" && test "${LAYA_CPU_PROFILE}" != "${LAYA_PROFILE_BINARY}" && test "${LAYA_HEAP_PROFILE}" != "${LAYA_PROFILE_BINARY}"
+        test ! -e "${LAYA_CPU_PROFILE}" && test ! -e "${LAYA_HEAP_PROFILE}" && test ! -e "${LAYA_PROFILE_BINARY}"
+        test -d "$(dirname "${LAYA_CPU_PROFILE}")" && test -d "$(dirname "${LAYA_HEAP_PROFILE}")" && test -d "$(dirname "${LAYA_PROFILE_BINARY}")"
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -c -o "${LAYA_PROFILE_BINARY}" .
+        "${LAYA_PROFILE_BINARY}" -test.run '^TestProtectedQualificationMetrics$' -test.cpuprofile "${LAYA_CPU_PROFILE}" -test.memprofile "${LAYA_HEAP_PROFILE}"
+
+  qualification:gate:
+    desc: Measure the named linux/amd64 FP32 candidate over explicit reviewed local artifacts.
+    deps: [native:verify, native:scan]
+    env:
+      CGO_ENABLED: "1"
+      GOPROXY: "off"
+      ORT_DISABLE_TELEMETRY: "1"
+      HTTP_PROXY: "http://127.0.0.1:1"
+      HTTPS_PROXY: "http://127.0.0.1:1"
+      ALL_PROXY: "http://127.0.0.1:1"
+      NO_PROXY: ""
+    cmds:
+      - |
+        test "$(go env GOOS)/$(go env GOARCH)" = "linux/amd64"
+        export CGO_LDFLAGS="-L$(dirname "${LAYA_TOKENIZERS_LIBRARY}") ${CGO_LDFLAGS:-}"
+        go test -p=1 -tags=laya_native -count=1 -run '^TestProtectedQualificationMetrics$' -v .
+
+  release:sbom:
+    desc: Print the exact Go module inventory for release review; writes no files.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - go list -m all
+
+  package:verify:
+    desc: Verify committed v0.1 source/package contents, licenses, scope, size, secrets, and protected paths.
+    env:
+      GOPROXY: "off"
+    cmds:
+      - task: preflight:tracked
+      - test "$(tr -d '\n' < VERSION)" = "0.1.0"
+      - test -f LICENSE && test -f CHANGELOG.md && test -f SECURITY.md
+      - go list ./...
+      - |
+        large_files="$(find . -path './.git' -prune -o -path './.beads' -prune -o -path './.cache' -prune -o -path './pack/callee' -prune -o -type f -size +10M -print)"
+        test -z "$large_files"
+      - test -z "$(git status --short -- pack/callee)"
+      - git diff --check
+
+  package:linux-amd64:
+    desc: Create one immutable gzip-compressed source archive from HEAD at an explicit new absolute path.
+    preconditions:
+      - sh: test -n "${LAYA_PACKAGE_OUTPUT:-}"
+        msg: "Set LAYA_PACKAGE_OUTPUT to a new absolute .tar.gz file."
+    cmds:
+      - task: package:verify
+      - |
+        case "${LAYA_PACKAGE_OUTPUT}" in /*.tar.gz) ;; *) echo "package output must be an absolute .tar.gz path"; exit 1;; esac
+        test ! -e "${LAYA_PACKAGE_OUTPUT}" && test ! -e "${LAYA_PACKAGE_OUTPUT}.tmp.tar" && test ! -e "${LAYA_PACKAGE_OUTPUT}.tmp.tar.gz"
+        test -d "$(dirname "${LAYA_PACKAGE_OUTPUT}")"
+        git archive --format=tar --prefix=laya-go-v0.1.0/ --output="${LAYA_PACKAGE_OUTPUT}.tmp.tar" HEAD
+        gzip -n "${LAYA_PACKAGE_OUTPUT}.tmp.tar"
+        mv "${LAYA_PACKAGE_OUTPUT}.tmp.tar.gz" "${LAYA_PACKAGE_OUTPUT}"
+        sha256sum "${LAYA_PACKAGE_OUTPUT}"
+
+  rollback:verify:
+    desc: Verify contracts and a required explicit immutable previous bundle; does not change deployment state.
+    preconditions:
+      - sh: test -n "${LAYA_ROLLBACK_BUNDLE_DIR:-}"
+        msg: "Set LAYA_ROLLBACK_BUNDLE_DIR to an already-local immutable previous bundle."
+    env:
+      GOPROXY: "off"
+    cmds:
+      - task: bundle:contract
+      - task: adk:contract
+      - task: example:contract
+      - go run ./internal/cmd/bundlecheck "${LAYA_ROLLBACK_BUNDLE_DIR}"
+
+  release:contract:
+    desc: Run artifact-independent code/contract checks; this is not complete native or release verification.
+    cmds:
+      - task: preflight:tracked
+      - task: check
+      - task: source:audit
+      - task: package:verify
+      - task: release:sbom
+
+  release:verify:
+    desc: Run complete tracked-source, protected native, both source-mode, embedded, ADK, qualification and rollback gates.
+    cmds:
+      - task: release:contract
+      - task: native:integration
+      - task: source:integration
+      - task: adk:integration
+      - task: example:integration
+      - task: bundle:materialize-embedded
+      - task: qualification:gate
+      - task: rollback:verify
+
+  release:verify-initial:
+    desc: Verify the first v0.1.0 release with all native gates; explicitly has no predecessor to roll back to.
+    preconditions:
+      - sh: test "$(tr -d '\n' < VERSION)" = "0.1.0"
+        msg: "This first-release exception is valid only for v0.1.0."
+      - sh: test -z "${LAYA_ROLLBACK_BUNDLE_DIR:-}"
+        msg: "Use release:verify when a previous immutable bundle exists."
+    cmds:
+      - task: release:contract
+      - task: native:integration
+      - task: source:integration
+      - task: adk:integration
+      - task: example:integration
+      - task: bundle:materialize-embedded
+      - task: qualification:gate
+      - echo "Initial v0.1.0 verification passed; rollback to a prior release is unavailable and was not verified."
+
+  test:
+    desc: Run the hermetic unit, contract, and example tests.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go test ./...
+
+  test:race:
+    desc: Run all tests with the Go race detector.
+    preconditions:
+      - sh: command -v go >/dev/null 2>&1
+        msg: "Go {{.GO_VERSION}} or newer is required: https://go.dev/dl/"
+    cmds:
+      - go test -race ./...
+
+  lint:
+    desc: Run golangci-lint with the repository configuration.
+    preconditions:
+      - sh: command -v golangci-lint >/dev/null 2>&1
+        msg: "golangci-lint {{.GOLANGCI_LINT_VERSION}} is required: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@{{.GOLANGCI_LINT_VERSION}}"
+    cmds:
+      - golangci-lint run --config .golangci.yml ./...
+
+  vuln:
+    desc: Scan reachable Go code with the public Go vulnerability database.
+    preconditions:
+      - sh: command -v govulncheck >/dev/null 2>&1
+        msg: "govulncheck {{.GOVULNCHECK_VERSION}} is required: go install golang.org/x/vuln/cmd/govulncheck@{{.GOVULNCHECK_VERSION}}"
+    cmds:
+      - govulncheck ./...
+
+  check:
+    desc: Run every required non-mutating repository quality gate.
+    cmds:
+      - task: fmt
+      - task: tidy
+      - task: verify
+      - task: bundle:contract
+      - task: native:ci:contract
+      - task: reference:verify
+      - task: adk:contract
+      - task: adk:audit
+      - task: example:audit
+      - task: test
+      - task: test:race
+      - task: lint
+      - task: vuln
