@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "candidate": {
+    "go_version": "1.26.6",
+    "goos": "linux",
+    "goarch": "amd64",
+    "cgo": true
+  },
+  "onnxruntime_go": {
+    "module": "github.com/yalue/onnxruntime_go",
+    "version": "v1.36.0",
+    "revision": "1f0fb0647fc7091b57ec72dcf0f666d2234e4d04",
+    "module_sha256": "h1:iH1Q++DcsyT9sWtN26KYimESlI5hhXpKaChHDS44oV4=",
+    "go_mod_sha256": "h1:b4X26A8pekNb1ACJ58wAXgNKeUCGEAQ9dmACut9Sm/4=",
+    "license": "MIT",
+    "license_sha256": "b7177fa196f86e5102a5d2702c1b28ea62eb02fd2d633a37f2dbd6ffc0ba8b4f",
+    "local_patch": "none"
+  },
+  "onnxruntime": {
+    "version": "1.29.0",
+    "revision": "2e2543fbe9fae542f921d47a72d21d5a4ef0b710",
+    "asset_url": "https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-x64-1.29.0.tgz",
+    "asset_size": 11082880,
+    "asset_sha256": "c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba",
+    "library_path": "onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0",
+    "library_size": 28497752,
+    "library_sha256": "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca",
+    "license": "MIT",
+    "license_sha256": "2f07c72751aed99790b8a4869cf2311df85a860b22ded05fa22803587a48922c"
+  },
+  "tokenizers_go": {
+    "module": "github.com/daulet/tokenizers",
+    "version": "v1.27.0",
+    "revision": "f678a7768d5479d9d5a5161c4fc45c8a5ba46146",
+    "module_sha256": "h1:MmFYAEDFz69s/nNQfHg59DWqHz3v94m99kEZ/JbL+s4=",
+    "go_mod_sha256": "h1:YjFY1o1HGMyWkQgbXJDghhvke/yFDp2vGdIO2hYs4MQ=",
+    "cargo_lock_sha256": "6570a4a3d74cdcfaa261a862e61a05bc0d1f74387a607808c4378c7ffc604878",
+    "ffi_source_sha256": "66bb45805c7fe27c7f1344bd47f07803beb1349fc64d5bb074fa2700452a240a",
+    "license": "MIT",
+    "license_sha256": "b9566347c4b3ab2f72d21eed103b0d892b372dd3295940a7f13242472fde1f76",
+    "local_variant": "internal/native/tokenizer",
+    "retained_api": ["FromBytes", "FromFile", "EncodeErr", "Version", "Close"],
+    "removed_capabilities": ["HTTP", "authentication", "download", "cache", "model resolution"]
+  },
+  "tokenizers_native": {
+    "release": "v1.27.0",
+    "reported_version": "1.26.0",
+    "asset_url": "https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz",
+    "asset_size": 14331593,
+    "asset_sha256": "72556cdca798dd4ea7cdaba308e5f0d68a8cb93b67c96edf485b7a0edd7b07f4",
+    "library_path": "libtokenizers.a",
+    "library_size": 49776794,
+    "library_sha256": "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50",
+    "abi_marker": "tokenizers_version_1_26_0",
+    "license": "MIT",
+    "license_sha256": "b9566347c4b3ab2f72d21eed103b0d892b372dd3295940a7f13242472fde1f76"
+  }
+}
