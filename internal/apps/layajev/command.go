@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 
+	"github.com/metalagman/laya-go"
 	"github.com/spf13/cobra"
 )
 
@@ -15,7 +16,7 @@ import (
 // The caller owns signal handling, command execution, and the process exit code.
 func NewCommand() *cobra.Command {
 	root := &cobra.Command{Use: "layajev", Short: "Serve a local Laya model with a Jev-compatible API subset"}
-	root.AddCommand(newServeCommand(), newFetchCommand(), newConvertCommand())
+	root.AddCommand(newServeCommand(), newDoctorCommand(), newFetchCommand(), newConvertCommand())
 	return root
 }
 
@@ -24,16 +25,8 @@ func newServeCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use: "serve", Short: "Serve an already-local verified bundle",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if os.Getenv("LAYA_ONNXRUNTIME_LIBRARY") == "" {
-				executable, err := os.Executable()
-				if err != nil {
-					return fmt.Errorf("serve: locate executable: %w", err)
-				}
-				if library := packagedONNXRuntimeLibrary(executable); library != "" {
-					if err := os.Setenv("LAYA_ONNXRUNTIME_LIBRARY", library); err != nil {
-						return fmt.Errorf("serve: configure packaged ONNX Runtime: %w", err)
-					}
-				}
+			if err := configurePackagedONNXRuntime(); err != nil {
+				return fmt.Errorf("serve: %w", err)
 			}
 			return Serve(cmd.Context(), cfg)
 		},
@@ -44,6 +37,42 @@ func newServeCommand() *cobra.Command {
 	command.Flags().IntVar(&cfg.QueueSize, "queue-size", 16, "maximum waiting local inference requests")
 	_ = command.MarkFlagRequired("bundle")
 	return command
+}
+
+func newDoctorCommand() *cobra.Command {
+	return &cobra.Command{
+		Use: "doctor", Short: "Verify the local native runtime without a model bundle",
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			if err := configurePackagedONNXRuntime(); err != nil {
+				return fmt.Errorf("doctor: %w", err)
+			}
+			runtime, err := laya.NewRuntime(cmd.Context(), laya.RuntimeOptions{})
+			if err != nil {
+				return fmt.Errorf("doctor: open native runtime: %w", err)
+			}
+			if err := runtime.Close(cmd.Context()); err != nil {
+				return fmt.Errorf("doctor: close native runtime: %w", err)
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), "native runtime OK")
+			return err
+		},
+	}
+}
+
+func configurePackagedONNXRuntime() error {
+	if os.Getenv("LAYA_ONNXRUNTIME_LIBRARY") != "" {
+		return nil
+	}
+	executable, err := os.Executable()
+	if err != nil {
+		return fmt.Errorf("locate executable: %w", err)
+	}
+	if library := packagedONNXRuntimeLibrary(executable); library != "" {
+		if err := os.Setenv("LAYA_ONNXRUNTIME_LIBRARY", library); err != nil {
+			return fmt.Errorf("configure packaged ONNX Runtime: %w", err)
+		}
+	}
+	return nil
 }
 
 func packagedONNXRuntimeLibrary(executable string) string {

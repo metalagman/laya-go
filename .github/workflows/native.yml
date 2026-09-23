@@ -33,6 +33,12 @@ jobs:
           go-version-file: go.mod
           cache: false
 
+      - name: Set up Node for installed-package qualification
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
       - name: Set up pinned build-time exporter
         uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
@@ -132,12 +138,16 @@ jobs:
           curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --output "$artifact_root/tokenizers.tar.gz" "$TOKENIZERS_URL"
           echo "c3fddc4f139a045b0c4902c57410f0694f1c2fdf9b6939fbe38b1aeae7cd14ba  $artifact_root/onnxruntime.tgz" | sha256sum --check --status
           echo "72556cdca798dd4ea7cdaba308e5f0d68a8cb93b67c96edf485b7a0edd7b07f4  $artifact_root/tokenizers.tar.gz" | sha256sum --check --status
-          tar -xzf "$artifact_root/onnxruntime.tgz" -C "$artifact_root" onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0
+          tar -xzf "$artifact_root/onnxruntime.tgz" -C "$artifact_root" \
+            onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0 \
+            onnxruntime-linux-x64-1.29.0/LICENSE \
+            onnxruntime-linux-x64-1.29.0/ThirdPartyNotices.txt
           tar -xzf "$artifact_root/tokenizers.tar.gz" -C "$artifact_root" libtokenizers.a
           echo "5715f06d8992ca8eeeddcce43df3a7d38f97d537052126f558e912cb312460ca  $artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" | sha256sum --check --status
           echo "e6862b31745bb7d07980fcee70e49cd3b4318097609180f5d2d3fb394f305d50  $artifact_root/libtokenizers.a" | sha256sum --check --status
           mkdir -m 700 "$artifact_root/embed-work"
           echo "LAYA_ONNXRUNTIME_LIBRARY=$artifact_root/onnxruntime-linux-x64-1.29.0/lib/libonnxruntime.so.1.29.0" >> "$GITHUB_ENV"
+          echo "LAYA_ONNXRUNTIME_DISTRIBUTION=$artifact_root/onnxruntime-linux-x64-1.29.0" >> "$GITHUB_ENV"
           echo "LAYA_TOKENIZERS_LIBRARY=$artifact_root/libtokenizers.a" >> "$GITHUB_ENV"
           echo "LAYA_EMBED_WORKDIR=$artifact_root/embed-work" >> "$GITHUB_ENV"
 
@@ -160,3 +170,17 @@ jobs:
           task bundle:materialize-embedded
           task test:embedded:race
           task qualification:gate
+
+      - name: Install staged npm packages and serve verified bundle
+        shell: bash
+        env:
+          OMNIDIST_VERSION: 0.0.0-ci
+          ORT_DISABLE_TELEMETRY: "1"
+        run: |
+          set -euo pipefail
+          export CGO_LDFLAGS="-L$(dirname "$LAYA_TOKENIZERS_LIBRARY")"
+          npx -y @omnidist/omnidist@0.1.37 build
+          npx -y @omnidist/omnidist@0.1.37 stage
+          task package:npm-native
+          npx -y @omnidist/omnidist@0.1.37 verify
+          task package:npm-smoke
