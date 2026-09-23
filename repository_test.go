@@ -47,7 +47,7 @@ func TestCIUsesPinnedLeastPrivilegeQualityGate(t *testing.T) {
 
 	for _, required := range []string{
 		"permissions:\n  contents: read",
-		"go-version: 1.26.6",
+		"go-version-file: go.mod",
 		"GOTOOLCHAIN: local",
 		"run: task check",
 	} {
