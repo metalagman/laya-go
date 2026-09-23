@@ -33,11 +33,19 @@ subset, HTTP examples, and safe binding rules. The default server listens on
 `127.0.0.1:8080`; it provides neither TLS nor authentication. Do not expose it
 directly on a public interface.
 
-The packaged `fetch` and `convert` subcommands are **not** standalone model
-preparation tools yet: `fetch` locates a checked-in export profile and
-`convert` invokes the repository Taskfile and locked exporter. Run those from
-an appropriate source checkout with its prerequisites, or supply an already
-verified bundle. Do not expect `npx` alone to acquire or convert a model.
+Starting with the next release after 0.2.0, the packaged `fetch` command uses
+an embedded pinned source manifest and works outside a source checkout:
+
+```sh
+npx -y "@metalagman/layajev@$LAYAJEV_VERSION" fetch --destination source-snapshot
+```
+
+Version 0.2.0 has a known bug: `fetch` tries to read the manifest from the
+current checkout. For that version, run it from a `laya-go` checkout or pass
+`--repository-root` explicitly. The `convert` command still invokes the
+repository Taskfile and locked exporter, so it requires a source checkout and
+its prerequisites. `fetch` downloads the pinned source snapshot, not a
+ready-to-serve ONNX bundle; do not pass its destination directly to `serve`.
 
 ## Prepare a release candidate
 

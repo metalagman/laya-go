@@ -5,10 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -86,11 +89,47 @@ func TestConvertValidation(t *testing.T) {
 
 func TestLoadPinnedProfile(t *testing.T) {
 	t.Parallel()
-	profile, err := loadPinnedProfile(filepath.Join("..", "..", ".."))
+	profile, err := loadPinnedProfile("")
 	if err != nil {
 		t.Fatalf("loadPinnedProfile: %v", err)
 	}
 	if profile.SourceModel.ID != officialModelID || profile.SourceModel.Revision != officialRevision || len(profile.SourceFiles) == 0 {
 		t.Errorf("unexpected pinned source: %+v", profile.SourceModel)
+	}
+	data, err := os.ReadFile("../../../tools/export/profiles/laya-multilingual-v1.json")
+	if err != nil {
+		t.Fatalf("read canonical export profile: %v", err)
+	}
+	var canonical pinnedProfile
+	if err := json.Unmarshal(data, &canonical); err != nil {
+		t.Fatalf("parse canonical export profile: %v", err)
+	}
+	if !reflect.DeepEqual(profile, canonical) {
+		t.Error("embedded fetch source differs from canonical export profile")
+	}
+	fromCheckout, err := loadPinnedProfile(filepath.Join("..", "..", ".."))
+	if err != nil {
+		t.Fatalf("load checkout profile: %v", err)
+	}
+	if !reflect.DeepEqual(profile, fromCheckout) {
+		t.Error("embedded fetch source differs from checkout profile")
+	}
+}
+
+func TestFetchStandalone(t *testing.T) {
+	if os.Getenv("LAYAJEV_TEST_STANDALONE") == "1" {
+		command := NewCommand()
+		command.SetArgs([]string{"fetch", "--destination", "."})
+		err := command.ExecuteContext(context.Background())
+		if err == nil || !strings.Contains(err.Error(), "already exists") {
+			t.Fatalf("fetch outside checkout error = %v, want existing destination", err)
+		}
+		return
+	}
+	command := exec.Command(os.Args[0], "-test.run=^TestFetchStandalone$")
+	command.Dir = t.TempDir()
+	command.Env = append(os.Environ(), "LAYAJEV_TEST_STANDALONE=1")
+	if output, err := command.CombinedOutput(); err != nil {
+		t.Fatalf("fetch outside checkout: %v\n%s", err, output)
 	}
 }
