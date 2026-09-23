@@ -321,13 +321,14 @@ func (metadata Metadata) validate() error {
 		return errors.New("parity profile identity mismatch")
 	}
 	if metadata.Exporter.Name != "laya-go-export" || metadata.Exporter.Version != "1.0.0" ||
-		metadata.Exporter.SourceSHA256 != "c216a474624f970abbdf17673a94a6fb41cbbda036dbd8d9bcda91705fe1c136" {
+		metadata.Exporter.SourceSHA256 != "1087a4322ac2279653d5c132f0631246ab8770dd83f5be22ed7b21bd69a215c6" ||
+		metadata.Exporter.GitRevision != "b61873c061ae62e52f4e0a6dc6fdafb6ffe88a88" {
 		return errors.New("parity exporter identity mismatch")
 	}
 	if metadata.Lock != (FileDigest{Path: "tools/export/uv.lock", SHA256: "b08b67cdf27c9820ce9a4173a583b6da4706cfa72d9a60a333e58fc8a29b3e12"}) {
 		return errors.New("parity lock identity mismatch")
 	}
-	const manifestDigest = "b3d35e00b0689988dff23f0eeed8721f10cce2c3a10d720f6c7d42cfc7d8c4de"
+	const manifestDigest = "963bc035d885e0463ea1d7d54906cadf0e2a3a41073e131921800ea5cc358935"
 	if metadata.BundleID != "sha256:"+manifestDigest || metadata.ManifestSHA256 != manifestDigest {
 		return errors.New("parity bundle identity mismatch")
 	}

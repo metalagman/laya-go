@@ -6,7 +6,9 @@
   globals, or command-line policy to the root package.
 - Model acquisition is caller-owned. Do not add Hugging Face clients,
   authentication, repository resolution, downloads, or external cache
-  management.
+  management to the library. The trusted manual native CI workflow may fetch
+  only pinned, digest-verified official inputs to assemble a disposable test
+  bundle through `Taskfile.yml`; it must not publish or cache model weights.
 - Production inference is local and in-process. Do not add an HTTP, gRPC,
   Python, or child-process inference path.
 - Do not modify `pack/callee/**` as part of Prism lifecycle work.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 from unittest import mock
@@ -10,6 +11,50 @@ from laya_export.exporter import atomic_publish, reject_overlap
 
 
 class ExporterSecurityTest(unittest.TestCase):
+    def test_exporter_revision_ignores_later_docs_and_rejects_dirty_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root / "tools/export/src/laya_export/exporter.py"
+            probe = root / "tools/export/sdk_probe.py"
+            source.parent.mkdir(parents=True)
+            probe.parent.mkdir(parents=True, exist_ok=True)
+            source.write_text("initial\n", encoding="utf-8")
+            probe.write_text("probe\n", encoding="utf-8")
+
+            def git(*arguments: str) -> str:
+                return subprocess.run(
+                    [
+                        "git", "-C", str(root),
+                        "-c", "user.name=Test",
+                        "-c", "user.email=test@example.com",
+                        "-c", "commit.gpgsign=false",
+                        *arguments,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                ).stdout.strip()
+
+            git("init", "-q")
+            git("add", "tools/export")
+            git("commit", "-qm", "exporter")
+            revision = git("rev-parse", "HEAD")
+            (root / "README.md").write_text("documentation\n", encoding="utf-8")
+            git("add", "README.md")
+            git("commit", "-qm", "docs")
+            self.assertEqual(exporter.exporter_git_revision(root), revision)
+
+            source.write_text("changed\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be committed"):
+                exporter.exporter_git_revision(root)
+            git("add", "tools/export")
+            git("commit", "-qm", "change exporter")
+            self.assertEqual(exporter.exporter_git_revision(root), git("rev-parse", "HEAD"))
+
+            (source.parent / "untracked.py").write_text("new\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "must be committed"):
+                exporter.exporter_git_revision(root)
+
     def test_atomic_publish_makes_complete_directory_visible(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

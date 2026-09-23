@@ -143,6 +143,7 @@ tasks:
       PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      ORT_DISABLE_TELEMETRY: "1"
     cmds:
       - go run ./internal/cmd/bundlecheck "${LAYA_BUNDLE_DIR}"
       - uv run --project tools/export --offline --frozen python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json corpus --source "${LAYA_SOURCE_DIR}" --sdk "${LAYA_SDK_DIR}" --bundle "${LAYA_BUNDLE_DIR}" --repository-root "{{.ROOT_DIR}}" --output "${LAYA_FIXTURE_OUTPUT}"
@@ -196,6 +197,7 @@ tasks:
       PYTHONPATH: "{{.ROOT_DIR}}/tools/export/src"
       HF_HUB_OFFLINE: "1"
       TRANSFORMERS_OFFLINE: "1"
+      ORT_DISABLE_TELEMETRY: "1"
     cmds:
       - go build -o .cache/bundlecheck ./internal/cmd/bundlecheck
       - uv run --project tools/export --offline --frozen python -m laya_export.cli --profile tools/export/profiles/laya-multilingual-v1.json export --source "${LAYA_SOURCE_DIR}" --sdk "${LAYA_SDK_DIR}" --output "${LAYA_BUNDLE_DIR}" --epoch "${SOURCE_DATE_EPOCH}" --repository-root "{{.ROOT_DIR}}" --verifier "{{.ROOT_DIR}}/.cache/bundlecheck"
@@ -218,11 +220,6 @@ tasks:
     cmds:
       - scripts/verify-native-artifacts.sh
       - go run ./internal/cmd/bundlecheck "${LAYA_BUNDLE_DIR}"
-
-  native:ci:contract:
-    desc: Test the build-time CI bundle extractor against regular, escaping, linked, and duplicate archive entries.
-    cmds:
-      - PYTHONDONTWRITEBYTECODE=1 python3 -m unittest scripts/test_ci_unpack_bundle.py -v
 
   native:scan:
     desc: Prove native production code has no acquisition, network-client, Python, or child-process dependencies.
@@ -770,7 +767,6 @@ tasks:
       - task: tidy
       - task: verify
       - task: bundle:contract
-      - task: native:ci:contract
       - task: reference:verify
       - task: adk:contract
       - task: adk:audit

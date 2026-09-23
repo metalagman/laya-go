@@ -17,6 +17,10 @@ input, parity oracle, fallback, or release artifact.
 The caller obtains an immutable official checkpoint snapshot and, for protected
 reference verification, the pinned SDK source by an external process. laya-go
 does not authenticate, resolve revisions, download, or manage caches.
+The trusted manual native CI job acts as that caller for a disposable fixture:
+it fetches only pinned official files, verifies their digests, then invokes the
+same offline `task bundle:export` used locally. The library has no acquisition
+path.
 
 The exporter accepts explicit existing local paths and the checked-in
 `laya-multilingual-v1` profile. It verifies every expected checkpoint file by
@@ -33,8 +37,10 @@ Checkpoint content is data, not executable code. The exporter:
 - performs no network fallback.
 
 The complete model architecture used for export is reviewed and versioned with
-the exporter. Its source digest, Git revision, dependency-lock digest, profile
-digest, and deterministic creation epoch are written to bundle provenance.
+the exporter. Its source digest, last committed exporter-source Git revision,
+dependency-lock digest, profile digest, and deterministic creation epoch are
+written to bundle provenance. Later documentation commits cannot change the
+bundle identity; an uncommitted exporter source is rejected.
 
 ## Output and failure recovery
 
