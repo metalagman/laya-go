@@ -24,6 +24,11 @@ jobs:
           go-version: 1.26.6
           cache: false
 
+      - name: Install runner audit tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ripgrep
+
       - name: Install pinned quality tools
         run: |
           go install github.com/go-task/task/v3/cmd/task@v3.53.1
