@@ -1,8 +1,9 @@
 # v0.1 release preparation
 
 Version `0.1.0` is an unreleased candidate for
-`github.com/metalagman/laya-go`. Preparation does not authorize a commit, tag,
-push, GitHub release, or package publication.
+`github.com/metalagman/laya-go`. Source commits and review branches may be
+published, but a tag, GitHub Release, or package publication requires the
+applicable release gates and review to pass.
 
 Run `task release:sbom` to print the exact Go module inventory (not a formal
 SBOM), `task package:verify` to audit committed repository contents, and `task
@@ -16,6 +17,15 @@ remains uncommitted; a passing local worktree test is not clean-checkout
 evidence. `rollback:verify` authenticates the prior bundle and contracts
 without changing deployment state; application rollback still needs its own
 operational rehearsal.
+
+For the first `v0.1.0` release, there is no prior released bundle. Run
+`task release:verify-initial` with the same pinned native inputs and embedded
+work directory. It runs every release gate above except `rollback:verify`,
+requires the exact `0.1.0` version and no rollback-bundle setting, and ends
+with an explicit no-predecessor notice. It is not evidence of rollback and
+must not be reused for a later release. If the initial release is unsuitable,
+withdraw its recommendation and publish a corrected new version; do not
+pretend that the current bundle is a previous version.
 
 The safe setup checks are `task setup:platform` and `task setup:native`; they
 install or download nothing. `task bundle:verify` checks a supplied bundle,

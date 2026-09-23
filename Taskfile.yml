@@ -714,6 +714,23 @@ tasks:
       - task: qualification:gate
       - task: rollback:verify
 
+  release:verify-initial:
+    desc: Verify the first v0.1.0 release with all native gates; explicitly has no predecessor to roll back to.
+    preconditions:
+      - sh: test "$(tr -d '\n' < VERSION)" = "0.1.0"
+        msg: "This first-release exception is valid only for v0.1.0."
+      - sh: test -z "${LAYA_ROLLBACK_BUNDLE_DIR:-}"
+        msg: "Use release:verify when a previous immutable bundle exists."
+    cmds:
+      - task: release:contract
+      - task: native:integration
+      - task: source:integration
+      - task: adk:integration
+      - task: example:integration
+      - task: bundle:materialize-embedded
+      - task: qualification:gate
+      - echo "Initial v0.1.0 verification passed; rollback to a prior release is unavailable and was not verified."
+
   test:
     desc: Run the hermetic unit, contract, and example tests.
     preconditions:

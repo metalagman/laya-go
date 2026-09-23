@@ -237,6 +237,9 @@ native inputs, an embedded work directory, a previous immutable bundle for
 rollback verification, and a clean tracked checkout. `task package:linux-amd64`
 archives committed source, not model weights or native libraries. See
 [Release preparation](docs/release-v0.1.md) for prerequisites and recovery.
+For the first v0.1.0 release, `task release:verify-initial` runs the same
+protected gates but explicitly reports that rollback to a prior release cannot
+be verified because no prior release exists.
 
 Bundle format, offline export commands, and the frozen parity runbook are
 documented in [Bundle format v1](docs/bundle-format-v1.md),
