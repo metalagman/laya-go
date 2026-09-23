@@ -1,0 +1,23 @@
+# Local build outputs, dependency caches, and generated native artifacts.
+.git/
+.beads/
+.cache/
+.gocache/
+.gomodcache/
+.venv/
+bin/
+dist/
+artifacts/
+*.so
+*.dylib
+*.dll
+*.a
+*.o
+*.onnx
+*.safetensors
+
+# Editor and test output.
+.idea/
+.vscode/
+coverage.out
+*.coverprofile
