@@ -12,11 +12,16 @@ gates pass offline.
 
 This is not yet an advertised supported-platform claim: the native GitHub
 Actions job has not completed against a clean committed checkout. The
-`Native qualification` workflow is manual and uses a GitHub-hosted runner. A
-trusted operator must provide a public HTTPS URL for a root-layout bundle
-archive and its SHA-256. The workflow obtains the two native libraries from
-their pinned official release archives. It verifies archive digests before
-extraction, then native file digests/ABI and the expected logical bundle ID,
+`Native qualification` workflow is manual, runs only for `main`, and uses a
+GitHub-hosted runner. A trusted operator must set the repository secret
+`LAYA_CI_BUNDLE_URL` to an HTTPS URL for a root-layout bundle archive, then
+provide that archive's SHA-256 as the workflow input. The URL may use
+short-lived authentication; it is never supplied as a public workflow input or
+printed by the job.
+Do not attach the model bundle to the library's source release. The workflow
+obtains the two native libraries from their pinned official release archives.
+It verifies archive digests before extraction, then native file digests/ABI
+and the expected logical bundle ID,
 and runs the protected gates offline. Missing, wrong, or unavailable artifacts
 fail the job; they do not turn skipped tests into support evidence. No self-hosted
 runner, fork pull request, or runtime model downloader is involved.

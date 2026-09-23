@@ -5,10 +5,6 @@ name: Native qualification
 on:
   workflow_dispatch:
     inputs:
-      bundle_url:
-        description: Public HTTPS URL of a root-layout, complete bundle .tar.gz
-        required: true
-        type: string
       bundle_sha256:
         description: SHA-256 of that exact bundle archive
         required: true
@@ -20,12 +16,13 @@ permissions:
 jobs:
   native-linux-amd64:
     name: Pinned linux/amd64 native gates
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     env:
       GOTOOLCHAIN: local
       CGO_ENABLED: "1"
-      BUNDLE_URL: ${{ inputs.bundle_url }}
+      BUNDLE_URL: ${{ secrets.LAYA_CI_BUNDLE_URL }}
       BUNDLE_SHA256: ${{ inputs.bundle_sha256 }}
       ONNXRUNTIME_URL: https://github.com/microsoft/onnxruntime/releases/download/v1.29.0/onnxruntime-linux-x64-1.29.0.tgz
       TOKENIZERS_URL: https://github.com/daulet/tokenizers/releases/download/v1.27.0/libtokenizers.linux-amd64.tar.gz
@@ -36,7 +33,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: 1.26.6
+          go-version-file: go.mod
           cache: false
 
       - name: Install runner audit tools
@@ -55,13 +52,19 @@ jobs:
           go mod download -modfile="$modfile" all
           echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
 
-      - name: Validate public artifact inputs before download
+      - name: Validate artifact inputs before download
         shell: bash
         run: |
           set -euo pipefail
-          for name in BUNDLE_URL ONNXRUNTIME_URL TOKENIZERS_URL; do
+          if [[ -z "$BUNDLE_URL" ]]; then
+            echo "LAYA_CI_BUNDLE_URL repository secret is required" >&2
+            exit 1
+          fi
+          case "$BUNDLE_URL" in https://*) ;; *) echo "bundle URL must use HTTPS" >&2; exit 1;; esac
+          case "$BUNDLE_URL" in *'#'*) echo "bundle URL must not contain a fragment" >&2; exit 1;; esac
+          for name in ONNXRUNTIME_URL TOKENIZERS_URL; do
             url="${!name}"
-            case "$url" in https://*) ;; *) echo "$name must be a public HTTPS URL" >&2; exit 1;; esac
+            case "$url" in https://*) ;; *) echo "$name must be an HTTPS URL" >&2; exit 1;; esac
             case "$url" in *'@'*|*'?'*|*'#'*) echo "$name must contain no credentials or query tokens" >&2; exit 1;; esac
           done
           if ! rg -q '^[a-f0-9]{64}$' <<< "$BUNDLE_SHA256"; then
