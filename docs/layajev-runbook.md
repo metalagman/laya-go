@@ -22,6 +22,8 @@ task bundle:verify
 
 `fetch` reads the checked-in export profile, allows only `convaiinnovations/laya-multilingual` at revision `052592a15d198d9ad47da779604259b10b47b7aa`, checks every declared size and SHA-256, then publishes the new source directory. It does not overwrite an existing destination. A failed transfer removes its own staging directory and leaves the destination unpublished. It does not use Hugging Face credentials or external caches. `convert` runs the existing `bundle:export` Taskfile operation; that exporter is offline and verifies the result. For the detailed SDK pin and export prerequisites, see [official export operations](official-export-v1.md).
 
+Both commands write human-readable progress to stderr. `fetch` shows the current file, downloaded bytes (and a percentage from the pinned expected size), verification, and a success line only after publication. `convert` shows the current coarse exporter stage without an ETA or fabricated percentage; its canonical JSON result remains on stdout. An error or Ctrl-C does not print a success line. Redirect stderr separately if a script parses stdout.
+
 ## Serve and query
 
 ```sh

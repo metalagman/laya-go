@@ -3,6 +3,7 @@ package layajev
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -93,7 +94,7 @@ func newFetchCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return fetchPinned(cmd.Context(), profile, destination, nil)
+			return fetchPinned(cmd.Context(), profile, destination, nil, &fetchProgress{writer: cmd.ErrOrStderr()})
 		},
 	}
 	command.Flags().StringVar(&repositoryRoot, "repository-root", "", "optional laya-go checkout whose pinned export profile overrides the embedded profile")
@@ -108,7 +109,7 @@ func newConvertCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use: "convert", Short: "Convert a pinned local source with the offline Taskfile exporter",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			return convert(cmd.Context(), repositoryRoot, sourceDir, sdkDir, outputDir, epoch)
+			return convertWithStreams(cmd.Context(), repositoryRoot, sourceDir, sdkDir, outputDir, epoch, cmd.OutOrStdout(), cmd.ErrOrStderr())
 		},
 	}
 	command.Flags().StringVar(&repositoryRoot, "repository-root", ".", "laya-go checkout containing Taskfile.yml")
@@ -123,6 +124,10 @@ func newConvertCommand() *cobra.Command {
 }
 
 func convert(ctx context.Context, repositoryRoot, sourceDir, sdkDir, outputDir string, epoch int64) error {
+	return convertWithStreams(ctx, repositoryRoot, sourceDir, sdkDir, outputDir, epoch, os.Stdout, os.Stderr)
+}
+
+func convertWithStreams(ctx context.Context, repositoryRoot, sourceDir, sdkDir, outputDir string, epoch int64, stdout, stderr io.Writer) error {
 	if sourceDir == "" || sdkDir == "" || outputDir == "" || epoch <= 0 {
 		return fmt.Errorf("convert: source, SDK, output and positive epoch are required")
 	}
@@ -151,7 +156,8 @@ func convert(ctx context.Context, repositoryRoot, sourceDir, sdkDir, outputDir s
 			return fmt.Errorf("convert: resolve path %q: %w", path, err)
 		}
 	}
-	command := exec.CommandContext(ctx, "task", "bundle:export")
+	_, _ = fmt.Fprintln(stderr, "convert: starting offline export")
+	command := exec.CommandContext(ctx, "task", "--silent", "bundle:export")
 	command.Dir = root
 	command.Env = append(os.Environ(),
 		"LAYA_SOURCE_DIR="+paths[0],
@@ -159,10 +165,11 @@ func convert(ctx context.Context, repositoryRoot, sourceDir, sdkDir, outputDir s
 		"LAYA_BUNDLE_DIR="+paths[2],
 		"SOURCE_DATE_EPOCH="+strconv.FormatInt(epoch, 10),
 	)
-	command.Stdout = os.Stdout
-	command.Stderr = os.Stderr
+	command.Stdout = stdout
+	command.Stderr = stderr
 	if err := command.Run(); err != nil {
 		return fmt.Errorf("convert with Taskfile exporter: %w", err)
 	}
+	_, _ = fmt.Fprintf(stderr, "convert: bundle ready at %q\n", outputDir)
 	return nil
 }
