@@ -35,7 +35,7 @@ test -f "$consumer/node_modules/@metalagman/layajev-linux-x64/bin/libonnxruntime
 env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
   "$installed" --help >/dev/null
 doctor_output="$(env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
-  ORT_DISABLE_TELEMETRY=1 "$installed" doctor)"
+  -u ORT_DISABLE_TELEMETRY "$installed" doctor)"
 test "$doctor_output" = 'native runtime OK'
 
 if [[ -z "${LAYA_BUNDLE_DIR:-}" ]]; then
@@ -47,7 +47,7 @@ test -f "$LAYA_BUNDLE_DIR/manifest.json"
 command -v setsid >/dev/null
 listen=127.0.0.1:18977
 setsid env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
-  ORT_DISABLE_TELEMETRY=1 "$installed" serve --bundle "$LAYA_BUNDLE_DIR" \
+  -u ORT_DISABLE_TELEMETRY "$installed" serve --bundle "$LAYA_BUNDLE_DIR" \
   --listen "$listen" >"$work_dir/server.log" 2>&1 &
 server_pid=$!
 for attempt in $(seq 1 120); do

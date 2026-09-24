@@ -185,5 +185,5 @@ jobs:
             test "$actual" = "$expected"
           done
           env -u LAYA_ONNXRUNTIME_LIBRARY -u LAYA_TOKENIZERS_LIBRARY \
-            ORT_DISABLE_TELEMETRY=1 npm_config_cache="$RUNNER_TEMP/layajev-clean-npx" \
+            -u ORT_DISABLE_TELEMETRY npm_config_cache="$RUNNER_TEMP/layajev-clean-npx" \
             npx -y "@metalagman/layajev@$version" doctor

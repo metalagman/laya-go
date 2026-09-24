@@ -37,9 +37,8 @@ After a release has actually appeared on npm, use its exact version on a
 compatible `linux/amd64` host:
 
 ```sh
-export LAYAJEV_VERSION=0.2.2 # or a newer version with packaged ONNX Runtime
+export LAYAJEV_VERSION=0.2.6
 export LAYA_BUNDLE_DIR=/absolute/path/to/verified-bundle
-export ORT_DISABLE_TELEMETRY=1
 npx -y "@metalagman/layajev@$LAYAJEV_VERSION" serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
@@ -53,8 +52,9 @@ The tokenizer archive is linked into the packaged binary at build time; no
 tokenizer-library path is needed at runtime. The command finds the packaged
 ONNX Runtime library beside its executable. An explicitly set
 `LAYA_ONNXRUNTIME_LIBRARY` overrides that path and must still pass the pinned
-size and SHA-256 checks. The local bundle and telemetry setting remain
-required. `CGO_LDFLAGS` is only a build-time setting, not a consumer setting.
+size and SHA-256 checks. The local bundle remains required; starting in v0.2.6,
+`layajev` disables ONNX Runtime telemetry itself before native startup.
+`CGO_LDFLAGS` is only a build-time setting, not a consumer setting.
 Versions 0.2.0 and 0.2.1 do not package ONNX Runtime and require the explicit
 library path.
 See [native dependencies](https://github.com/metalagman/laya-go/blob/main/docs/native-dependencies.md) for pinned library identities

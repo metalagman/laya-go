@@ -30,12 +30,11 @@ Both commands write human-readable progress to stderr. `fetch` shows the current
 export LAYA_ONNXRUNTIME_LIBRARY="/absolute/path/libonnxruntime.so.1.29.0"
 export LAYA_TOKENIZERS_LIBRARY="/absolute/path/libtokenizers.a"
 export CGO_LDFLAGS="-L/absolute/path/containing/libtokenizers.a"
-export ORT_DISABLE_TELEMETRY=1
 task setup:native
 go run -tags=laya_native ./cmd/layajev serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
-The default listener is `127.0.0.1:8080`. `serve` verifies the supplied bundle before opening the model. It never fetches or converts. The `laya_native` build tag, `CGO_LDFLAGS` pointing at the static tokenizer library's directory, and the three native environment variables above are required for real inference; an ordinary Go build intentionally has no native backend. To choose another local address, run `go run -tags=laya_native ./cmd/layajev serve --bundle "$LAYA_BUNDLE_DIR" --listen 127.0.0.1:9090`. A non-loopback address requires `--allow-remote`. The server itself has no TLS or bearer-auth layer; for remote clients, deploy a TLS/authenticating reverse proxy and restrict network access. Do not expose sensitive inputs through an unauthenticated public listener. The API does not log request bodies.
+The default listener is `127.0.0.1:8080`. `serve` verifies the supplied bundle before opening the model. It never fetches or converts. The `laya_native` build tag, `CGO_LDFLAGS` pointing at the static tokenizer library's directory, and the native library paths above are required for real inference; an ordinary Go build intentionally has no native backend. The `layajev` CLI disables ONNX Runtime telemetry itself before native startup. To choose another local address, run `go run -tags=laya_native ./cmd/layajev serve --bundle "$LAYA_BUNDLE_DIR" --listen 127.0.0.1:9090`. A non-loopback address requires `--allow-remote`. The server itself has no TLS or bearer-auth layer; for remote clients, deploy a TLS/authenticating reverse proxy and restrict network access. Do not expose sensitive inputs through an unauthenticated public listener. The API does not log request bodies.
 
 First discover the actual local model name:
 
