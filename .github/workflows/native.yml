@@ -170,17 +170,3 @@ jobs:
           task bundle:materialize-embedded
           task test:embedded:race
           task qualification:gate
-
-      - name: Install staged npm packages and serve verified bundle
-        shell: bash
-        env:
-          OMNIDIST_VERSION: 0.0.0-ci
-          ORT_DISABLE_TELEMETRY: "1"
-        run: |
-          set -euo pipefail
-          export CGO_LDFLAGS="-L$(dirname "$LAYA_TOKENIZERS_LIBRARY")"
-          npx -y @omnidist/omnidist@0.1.37 build
-          npx -y @omnidist/omnidist@0.1.37 stage
-          task package:npm-native
-          npx -y @omnidist/omnidist@0.1.37 verify
-          task package:npm-smoke

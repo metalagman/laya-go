@@ -124,42 +124,10 @@ boundary and runbook.
 
 ## `layajev` API and container
 
-`layajev` exposes a documented Jev-compatible subset through `GET /v1/models`
-and `POST /v1/systemone`. Inference stays local and in-process; the server
-requires a complete, verified bundle and never fetches or converts one. The
-published `linux/amd64` npm package includes the pinned native runtime but no
-model weights. For a host with an existing bundle:
-
-```sh
-npx -y @metalagman/layajev@0.2.6 doctor
-npx -y @metalagman/layajev@0.2.6 serve --bundle /absolute/path/to/verified-bundle
-```
-
-The [Dockerfile](Dockerfile) builds a self-contained `linux/amd64` image. Its
-build stage fetches the pinned official model source, converts and verifies a
-complete bundle, then includes it in the final image alongside the exact
-published native runtime. `docker run` needs no model mount or download. The
-server has **no TLS or authentication**; bind the published port to host
-loopback and put a TLS/authenticating reverse proxy in front of it:
-
-```sh
-docker build --platform linux/amd64 -t layajev:0.2.6 .
-docker run --rm --name layajev \
-  --read-only --tmpfs /tmp:rw,nosuid,nodev,size=64m \
-  --publish 127.0.0.1:8080:8080 layajev:0.2.6
-```
-
-The repository operations are also available as `task container:build`,
-`task container:doctor`, and `task container:serve`.
-For Compose, use `docker compose -f compose.yaml up --build -d` locally or the
-[proxy-network example](docs/examples/compose-proxy.yaml) behind an existing
-TLS/authenticating reverse proxy; neither example mounts a bundle.
-
-See [container operations](docs/layajev-container-runbook.md) for build,
-health, permissions, security, and recovery; [CLI operations](docs/layajev-runbook.md)
-for the API subset; and [npm/npx operations](docs/layajev-npm-release.md) for
-the from-zero model preparation workflow. Only the pinned linux/amd64 native
-candidate is qualified; this is not a multi-platform image.
+The Jev-compatible CLI, npm release, and self-contained production container
+are maintained separately in [metalagman/layajev](https://github.com/metalagman/layajev).
+This repository remains the reusable in-process `laya` library; it does not
+own CLI model acquisition or an HTTP server.
 
 ## Lifecycle, concurrency, and errors
 
@@ -277,10 +245,8 @@ native inputs, an embedded work directory, a previous immutable bundle for
 rollback verification, and a clean tracked checkout. `task package:linux-amd64`
 archives committed source, not model weights or native libraries. See
 [Release preparation](docs/release-v0.1.md) for prerequisites and recovery.
-The published `layajev` npm release is documented in
-[npm release and npx operations](docs/layajev-npm-release.md); it currently
-targets only `linux/amd64`, includes the pinned ONNX Runtime, and does not
-include a model bundle.
+The `layajev` npm release and operations are documented in
+[metalagman/layajev](https://github.com/metalagman/layajev).
 For the first v0.1.0 release, `task release:verify-initial` runs the same
 protected gates but explicitly reports that rollback to a prior release cannot
 be verified because no prior release exists.
