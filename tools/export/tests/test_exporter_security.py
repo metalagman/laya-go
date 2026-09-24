@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from contextlib import redirect_stderr
+import io
 from pathlib import Path
 import subprocess
 import tempfile
@@ -115,6 +117,7 @@ class ExporterSecurityTest(unittest.TestCase):
                 build_error = failure if phase == "interruption" else None
                 export_error = failure if phase == "resource" else None
                 parity_error = failure if phase == "parity" else None
+                progress = io.StringIO()
                 with (
                     mock.patch.object(exporter, "load_profile", return_value={}),
                     mock.patch.object(exporter, "verify_source"),
@@ -139,16 +142,20 @@ class ExporterSecurityTest(unittest.TestCase):
                         side_effect=parity_error,
                     ),
                 ):
-                    with self.assertRaises(type(failure)):
-                        exporter.export_bundle(
-                            root / "profile.json",
-                            source,
-                            sdk,
-                            output,
-                            0,
-                            repository,
-                            verifier,
-                        )
+                    with redirect_stderr(progress):
+                        with self.assertRaises(type(failure)):
+                            exporter.export_bundle(
+                                root / "profile.json",
+                                source,
+                                sdk,
+                                output,
+                                0,
+                                repository,
+                                verifier,
+                            )
+
+                self.assertIn("convert: verifying source and SDK", progress.getvalue())
+                self.assertNotIn("convert: publishing verified bundle", progress.getvalue())
 
                 self.assertFalse(output.exists())
                 self.assertEqual(list(root.glob(".bundle.staging-*")), [])

@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 from typing import Any
 
@@ -30,6 +31,10 @@ def export_bundle(
 ) -> dict[str, Any]:
     """Build and atomically publish one fully verified bundle."""
 
+    def emit_stage(message: str) -> None:
+        print(f"convert: {message}", file=sys.stderr, flush=True)
+
+    emit_stage("verifying source and SDK")
     profile = load_profile(profile_path)
     verify_source(profile, source_root)
     verify_sdk(sdk_root)
@@ -45,12 +50,16 @@ def export_bundle(
     destination.parent.mkdir(parents=True, exist_ok=True)
     stage = Path(tempfile.mkdtemp(prefix=f".{destination.name}.staging-", dir=destination.parent))
     try:
+        emit_stage("building and loading model")
         configuration = json.loads((source / "rl_agent_config.json").read_text(encoding="utf-8"))
         model = build_model(configuration, source / "encoder")
         weight_observation = load_exact_weights(model, source / "model.safetensors")
+        emit_stage("exporting ONNX graph")
         export_onnx(model, stage / "model.onnx")
+        emit_stage("validating graph and runtime parity")
         graph_observation = validate_onnx(stage / "model.onnx")
         parity = compare_runtime(model, stage / "model.onnx")
+        emit_stage("packaging and verifying bundle")
         copy_artifacts(source, sdk, stage)
         manifest = build_manifest(
             profile_path,
@@ -78,6 +87,7 @@ def export_bundle(
             "parity": parity,
             "manifest_sha256": manifest_sha256,
         }
+        emit_stage("publishing verified bundle")
         atomic_publish(stage, destination)
         return result
     except BaseException:

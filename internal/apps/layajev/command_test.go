@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -105,10 +106,171 @@ func TestFetchRejectsChecksumMismatch(t *testing.T) {
 	}
 }
 
+func TestFetchProgress(t *testing.T) {
+	t.Parallel()
+	content := bytes.Repeat([]byte("a"), 192<<10)
+	digest := sha256.Sum256(content)
+	profile := pinnedProfile{SourceFiles: []sourceFile{{Path: "tokenizer/config.json", Size: int64(len(content)), SHA256: hex.EncodeToString(digest[:])}}}
+	profile.SourceModel.ID = officialModelID
+	profile.SourceModel.Revision = officialRevision
+	client := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(bytes.NewReader(content))}, nil
+	})}
+	var output bytes.Buffer
+	destination := filepath.Join(t.TempDir(), "snapshot")
+	if err := fetchPinnedFrom(context.Background(), profile, destination, client, "https://example.test", &fetchProgress{writer: &output}); err != nil {
+		t.Fatalf("fetchPinnedFrom: %v", err)
+	}
+	progress := output.String()
+	for _, item := range []string{"downloading \"tokenizer/config.json\"", "65536/196608 bytes", "196608/196608 bytes (100%)", "verifying \"tokenizer/config.json\"", "verified snapshot ready"} {
+		if !strings.Contains(progress, item) {
+			t.Errorf("progress missing %q: %s", item, progress)
+		}
+	}
+	if strings.Index(progress, "verifying") > strings.Index(progress, "verified snapshot ready") {
+		t.Errorf("success preceded verification: %s", progress)
+	}
+}
+
+func TestFetchProgressFailureAndCancellation(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		cancel bool
+	}{
+		{name: "checksum mismatch"},
+		{name: "canceled", cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			profile := pinnedProfile{SourceFiles: []sourceFile{{Path: "file.txt", Size: 3, SHA256: strings.Repeat("0", 64)}}}
+			profile.SourceModel.ID = officialModelID
+			profile.SourceModel.Revision = officialRevision
+			client := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+				if test.cancel {
+					cancel()
+				}
+				return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader("abc"))}, nil
+			})}
+			var output bytes.Buffer
+			destination := filepath.Join(t.TempDir(), "snapshot")
+			err := fetchPinnedFrom(ctx, profile, destination, client, "https://example.test", &fetchProgress{writer: &output})
+			if err == nil {
+				t.Fatal("fetch succeeded unexpectedly")
+			}
+			if test.cancel && !errors.Is(err, context.Canceled) {
+				t.Errorf("cancellation error = %v, want context.Canceled", err)
+			}
+			if strings.Contains(output.String(), "verified snapshot ready") {
+				t.Errorf("false success: %s", output.String())
+			}
+			if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+				t.Errorf("destination exists after failure: %v", err)
+			}
+		})
+	}
+}
+
+func TestFetchProgressUnknownTotal(t *testing.T) {
+	t.Parallel()
+	emptyDigest := sha256.Sum256(nil)
+	profile := pinnedProfile{SourceFiles: []sourceFile{{Path: "empty.txt", Size: 0, SHA256: hex.EncodeToString(emptyDigest[:])}}}
+	profile.SourceModel.ID = officialModelID
+	profile.SourceModel.Revision = officialRevision
+	client := &http.Client{Transport: roundTripFunc(func(_ *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: http.StatusOK, Body: io.NopCloser(strings.NewReader(""))}, nil
+	})}
+	var fetchOutput bytes.Buffer
+	if err := fetchPinnedFrom(context.Background(), profile, filepath.Join(t.TempDir(), "snapshot"), client, "https://example.test", &fetchProgress{writer: &fetchOutput}); err != nil {
+		t.Fatalf("fetch zero-size file: %v", err)
+	}
+	if !strings.Contains(fetchOutput.String(), "\"empty.txt\": 0 bytes") || strings.Contains(fetchOutput.String(), "%") {
+		t.Errorf("zero-size file progress = %q", fetchOutput.String())
+	}
+	var output bytes.Buffer
+	(&fetchProgress{writer: &output}).bytes("empty", 0, 0)
+	if got := output.String(); got != "fetch: \"empty\": 0 bytes\n" {
+		t.Errorf("unknown total progress = %q", got)
+	}
+}
+
 func TestConvertValidation(t *testing.T) {
 	t.Parallel()
 	if err := convert(context.Background(), t.TempDir(), "", "", "", 0); err == nil {
 		t.Error("convert accepted empty inputs")
+	}
+}
+
+func TestConvertProgressStreams(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Taskfile.yml"), []byte("version: '3'\n"), 0o644); err != nil {
+		t.Fatalf("write Taskfile: %v", err)
+	}
+	bin := t.TempDir()
+	script := "#!/bin/sh\n[ \"$1\" = --silent ] && [ \"$2\" = bundle:export ] || exit 9\nprintf '{\"bundle\":\"test\"}\\n'\nprintf 'convert: exporting ONNX graph\\n' >&2\n[ \"$FAKE_TASK_FAIL\" = 1 ] && exit 7\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "task"), []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake task: %v", err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	source := t.TempDir()
+	sdk := t.TempDir()
+	for _, test := range []struct {
+		name   string
+		fail   bool
+		cancel bool
+	}{
+		{name: "success"},
+		{name: "failure", fail: true},
+		{name: "cancellation", cancel: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if test.fail {
+				t.Setenv("FAKE_TASK_FAIL", "1")
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			if test.cancel {
+				cancel()
+			}
+			var stdout, stderr bytes.Buffer
+			output := filepath.Join(t.TempDir(), "bundle")
+			err := convertWithStreams(ctx, root, source, sdk, output, 1, &stdout, &stderr)
+			if test.fail || test.cancel {
+				if err == nil {
+					t.Fatal("convert succeeded unexpectedly")
+				}
+				if strings.Contains(stderr.String(), "bundle ready") {
+					t.Errorf("false success on stderr: %s", stderr.String())
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("convertWithStreams: %v", err)
+			}
+			if got := stdout.String(); got != "{\"bundle\":\"test\"}\n" {
+				t.Errorf("stdout = %q, want only JSON", got)
+			}
+			for _, item := range []string{"starting offline export", "exporting ONNX graph", "bundle ready at"} {
+				if !strings.Contains(stderr.String(), item) {
+					t.Errorf("stderr missing %q: %s", item, stderr.String())
+				}
+			}
+			if strings.Contains(stderr.String(), "%") || strings.Contains(stderr.String(), "ETA") {
+				t.Errorf("stderr claims unknown precision: %s", stderr.String())
+			}
+			command := NewCommand()
+			var commandStdout, commandStderr bytes.Buffer
+			command.SetOut(&commandStdout)
+			command.SetErr(&commandStderr)
+			command.SetArgs([]string{"convert", "--repository-root", root, "--source", source, "--sdk", sdk, "--output", output, "--epoch", "1"})
+			if err := command.ExecuteContext(context.Background()); err != nil {
+				t.Fatalf("execute convert command: %v", err)
+			}
+			if commandStdout.String() != stdout.String() || !strings.Contains(commandStderr.String(), "bundle ready at") {
+				t.Errorf("command streams: stdout=%q stderr=%q", commandStdout.String(), commandStderr.String())
+			}
+		})
 	}
 }
 
