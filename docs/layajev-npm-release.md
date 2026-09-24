@@ -7,8 +7,8 @@ Darwin, Windows, ARM, musl, or general Linux compatibility claim. Neither npm
 package contains model weights or a Python inference service. Starting with
 version 0.2.2, the platform package includes the checksum-pinned ONNX Runtime
 shared library, its MIT license, and third-party notices. The 1.3 GiB FP32
-bundle remains a deployment-owned input. The present workflow only builds a
-candidate; it does not publish either package.
+bundle remains a deployment-owned input. The release workflow builds from an
+exact Git tag and then publishes the verified npm packages.
 
 ## Run a published package
 
@@ -56,39 +56,35 @@ repository Taskfile and locked exporter, so it requires a source checkout and
 its prerequisites. `fetch` downloads the pinned source snapshot, not a
 ready-to-serve ONNX bundle; do not pass its destination directly to `serve`.
 
-## Prepare a release candidate
+## Prepare a release
 
-From a reviewed `main` checkout, choose a new SemVer version; do not reuse the
-existing `v0.1.0` source-release tag or an npm version already published. The
-operator must confirm control of the `@metalagman` scope and both package names
-before any future publication. Review `.omnidist/omnidist.yaml`, the MIT
+From a reviewed `main` checkout, choose a new stable SemVer version; do not
+reuse the existing `v0.1.0` source-release tag or an npm version already
+published. Confirm control of the `@metalagman` scope and both package names
+before publication. Review `.omnidist/omnidist.yaml`, the MIT
 license, the pinned native dependency hashes, and the candidate diff. Run the
 repository's `task check` plus protected native qualification with the
 required external artifacts before making support claims.
 
-The trusted manual workflow `.github/workflows/omnidist-release.yml` accepts a
-version on `main`, acquires only the checksum-pinned native archives, and
-performs `build`, `stage`, and `verify`. Before upload, it packs both staged
+The tag-driven workflow `.github/workflows/omnidist-release.yml` resolves the
+version from the exact Git tag, acquires only checksum-pinned native archives,
+and performs `build`, `stage`, and `verify`. Before upload, it packs both staged
 packages, installs them together in a clean offline npm project, runs the
 installed CLI, and checks that the packaged ONNX Runtime opens and closes.
 The protected native qualification workflow repeats that installation and also
 starts the installed server with its verified disposable bundle, queries
-`GET /v1/models`, and makes one `POST /v1/systemone` prediction. Neither
-workflow publishes. Candidate packages are retained for seven days; the
-release workflow has read-only repository permission and no npm publish token.
-A maintainer may start it with:
-
-```sh
-gh workflow run omnidist-release.yml --ref main -f version=0.2.0-rc.0
-```
+`GET /v1/models`, and makes one `POST /v1/systemone` prediction. After staging
+succeeds, the release workflow publishes both npm packages through omnidist.
+Staged packages are retained for seven days; the staging job has read-only
+repository permission and no npm publish token.
 
 For local reproduction on `linux/amd64`, obtain the same verified
 `libtokenizers.a` described in [native dependencies](https://github.com/metalagman/laya-go/blob/main/docs/native-dependencies.md)
 without changing the source tree, then run:
 
 ```sh
-export OMNIDIST_VERSION=0.2.0-rc.0
 export CGO_LDFLAGS=-L/absolute/path/containing/libtokenizers.a
+# Check out the exact release tag before running the following commands.
 npx -y @omnidist/omnidist@latest build
 npx -y @omnidist/omnidist@latest stage
 npx -y @omnidist/omnidist@latest verify
@@ -101,20 +97,42 @@ correct names, and a single `linux/x64` optional dependency. Inspect the
 staged file list for absence of weights and unintended binaries. Run the
 staged binary's `--help`; for a native smoke, use the pinned external runtime
 and bundle and query `/v1/models` as described above. The `npx` CLI version
-used by the manual workflow is pinned to `@omnidist/omnidist@0.1.37`; local
+used by the tag workflow is pinned to `@omnidist/omnidist@0.1.37`; local
 reproduction with `@latest` must be reviewed if that version has moved.
 
-## Future publication and recovery
+## Publish through omnidist and recover
 
-Publication is a separate, explicit operator decision. It requires a reviewed
-candidate, successful quality/native gates, verified npm account and scope
-rights, and a new version. Never put an npm token in Git, workflow YAML, or a
-command argument. The profile uses token authentication; provide
-`NPM_PUBLISH_TOKEN` privately in a controlled environment. First run
-`npx -y @omnidist/omnidist@latest publish --dry-run` on the exact staged
-candidate, then use `npx -y @omnidist/omnidist@latest npm publish` only when
-the publication decision is made. No automatic tag push or GitHub Release is
-configured here.
+Pushing a new release tag is the publication decision. It requires a reviewed
+`main`, successful quality/native gates, verified npm account and scope rights,
+and a stable version absent from **both** npm packages. The profile uses npm
+trusted publishing, not a long-lived `NPM_PUBLISH_TOKEN`. Before the first
+release, the package owner must authorize this exact GitHub repository and
+workflow as a trusted publisher for **each** package. From an authenticated
+maintainer environment, inspect the commands with:
+
+```sh
+npx -y @omnidist/omnidist@latest npm trust
+```
+
+Then apply the reviewed trust configuration with
+`npx -y @omnidist/omnidist@latest npm trust --apply`. This changes npm package
+settings and may require npm account verification. The workflow's publish job
+requests GitHub OIDC only after the staging job succeeds, verifies the exact
+uploaded candidate, and runs omnidist `verify`, `publish --dry-run`, and
+`npm publish`. It then compares published npm checksums and runs `doctor` via
+a clean `npx` install. From the current `main` commit, choose a new stable
+SemVer version absent from both npm packages and push the exact tag:
+
+```sh
+git tag v0.2.4
+git push origin v0.2.4
+gh run list --workflow omnidist-release.yml --limit 5
+```
+
+Replace `0.2.4` with the next confirmed unused version; never assume a
+previous upload failed just because npm search or its web page lags. This
+workflow publishes only stable `vMAJOR.MINOR.PATCH` tags. It does not create
+or push tags or publish a GitHub Release.
 
 Npm publication is not atomic: omnidist sends the platform package before the
 meta package. If an upload fails, stop retries, preserve the log, and inspect
