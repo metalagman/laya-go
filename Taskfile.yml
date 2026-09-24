@@ -679,15 +679,15 @@ tasks:
       - bash scripts/smoke-npm-package.sh
 
   container:build:
-    desc: Build the linux/amd64 layajev image from the exact published npm release; uses Docker Hub, Ubuntu packages, and npm.
+    desc: Fetch, convert, and verify the pinned model during build; package it with the linux/amd64 native release.
     preconditions:
       - sh: command -v docker >/dev/null 2>&1
         msg: "Docker is required."
     cmds:
-      - docker build --platform linux/amd64 --build-arg LAYAJEV_VERSION={{.LAYAJEV_CONTAINER_VERSION}} -t layajev:{{.LAYAJEV_CONTAINER_VERSION}} .
+      - docker build --platform linux/amd64 -t layajev:{{.LAYAJEV_CONTAINER_VERSION}} .
 
   container:doctor:
-    desc: Check the built image's packaged native runtime without a model bundle.
+    desc: Check the built image's packaged native runtime; the model bundle is already included.
     preconditions:
       - sh: command -v docker >/dev/null 2>&1
         msg: "Docker is required."
@@ -695,18 +695,14 @@ tasks:
       - docker run --rm --entrypoint /opt/layajev/bin/layajev layajev:{{.LAYAJEV_CONTAINER_VERSION}} doctor
 
   container:serve:
-    desc: Serve an already-local LAYA_BUNDLE_DIR read-only on host loopback; provide TLS/auth upstream.
+    desc: Serve the image's built-in model on host loopback; provide TLS/auth upstream.
     preconditions:
       - sh: command -v docker >/dev/null 2>&1
         msg: "Docker is required."
-      - sh: test -n "${LAYA_BUNDLE_DIR:-}" && test -d "${LAYA_BUNDLE_DIR}"
-        msg: "Set LAYA_BUNDLE_DIR to an existing verified bundle directory."
     cmds:
       - |
-        case "${LAYA_BUNDLE_DIR}" in /*) ;; *) echo "LAYA_BUNDLE_DIR must be absolute"; exit 1;; esac
-        docker run --rm --user "$(id -u):$(id -g)" \
+        docker run --rm \
           --read-only --tmpfs /tmp:rw,nosuid,nodev,size=64m \
-          --mount "type=bind,src=${LAYA_BUNDLE_DIR},dst=/models,readonly" \
           --publish 127.0.0.1:8080:8080 --stop-timeout 60 \
           layajev:{{.LAYAJEV_CONTAINER_VERSION}}
 

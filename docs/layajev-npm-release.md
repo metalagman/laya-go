@@ -10,7 +10,7 @@ shared library, its MIT license, and third-party notices. The 1.3 GiB FP32
 bundle remains a deployment-owned input. The release workflow builds from an
 exact Git tag and then publishes the verified npm packages. The
 [production container](layajev-container-runbook.md) consumes the same exact
-published native package and accepts the bundle as a read-only mount.
+published native package and builds a verified bundle into the image.
 
 ## Run a published package
 

@@ -2,8 +2,9 @@
 set -Eeuo pipefail
 
 # Build a verified local bundle from the pinned official checkpoint, then
-# exercise the published layajev npm package. All generated files stay in the
-# chosen work directory; no system packages or global tools are installed.
+# optionally exercise the published layajev npm package. All generated files
+# stay in the chosen work directory; no system packages or global tools are
+# installed.
 
 readonly layajev_version=0.2.6
 readonly repository_commit=f79f795b6928234ebae905700ee8db893ad76897
@@ -13,11 +14,12 @@ readonly go_sha256=708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4fee
 readonly uv_sha256=6b52a47358deea1c5e173278bf46b2b489747a59ae31f2a4362ed5c6c1c269f7
 
 usage() {
-  printf 'Usage: bash %s [WORK_DIR]\n' "$0"
+  printf 'Usage: bash %s [--bundle-only] [WORK_DIR]\n' "$0"
   printf 'Default WORK_DIR: ./layajev-test-0.2.6\n'
   printf 'Requires Linux x86_64, git, curl, tar, sha256sum, Node/npx, and setsid.\n'
   printf 'Downloads pinned Go, uv, SDK, model source, and locked exporter dependencies.\n'
-  printf 'Allow at least 10 GiB free disk space and 4 GiB RAM. Ctrl-C stops the server.\n'
+  printf 'Allow at least 10 GiB free disk space and 4 GiB RAM.\n'
+  printf '%s\n' '--bundle-only verifies the bundle and exits; otherwise Ctrl-C stops the server.'
 }
 
 die() {
@@ -28,6 +30,11 @@ die() {
 if [[ ${1:-} == --help || ${1:-} == -h ]]; then
   usage
   exit 0
+fi
+bundle_only=false
+if [[ ${1:-} == --bundle-only ]]; then
+  bundle_only=true
+  shift
 fi
 if (( $# > 1 )); then
   usage >&2
@@ -150,6 +157,10 @@ fi
   LAYA_BUNDLE_DIR="$bundle_dir" GOPROXY=off task bundle:verify
 )
 [[ ! -L $bundle_dir ]] || die 'serve requires a real bundle directory, not a symlink'
+if [[ $bundle_only == true ]]; then
+  printf 'Verified bundle ready: %s\n' "$bundle_dir"
+  exit 0
+fi
 
 listen=127.0.0.1:18977
 api=http://$listen
