@@ -5,8 +5,8 @@ set -Eeuo pipefail
 # exercise the published layajev npm package. All generated files stay in the
 # chosen work directory; no system packages or global tools are installed.
 
-readonly layajev_version=0.2.5
-readonly repository_commit=4481f6dbef5bc45da49eaa7781815985bd5af052
+readonly layajev_version=0.2.6
+readonly repository_commit=f79f795b6928234ebae905700ee8db893ad76897
 readonly sdk_commit=573e5b62696ba441230cd6be71d593331b5d23af
 readonly sdk_sha256=03931635a92b7609c6c253ac1d4d618ebe4fc54956744db01c027b504fd9c426
 readonly go_sha256=708effb774be8237570d0add163225abbdfaf4fca28b2611df167beba4feef89
@@ -14,7 +14,7 @@ readonly uv_sha256=6b52a47358deea1c5e173278bf46b2b489747a59ae31f2a4362ed5c6c1c26
 
 usage() {
   printf 'Usage: bash %s [WORK_DIR]\n' "$0"
-  printf 'Default WORK_DIR: ./layajev-test-0.2.5\n'
+  printf 'Default WORK_DIR: ./layajev-test-0.2.6\n'
   printf 'Requires Linux x86_64, git, curl, tar, sha256sum, Node/npx, and setsid.\n'
   printf 'Downloads pinned Go, uv, SDK, model source, and locked exporter dependencies.\n'
   printf 'Allow at least 10 GiB free disk space and 4 GiB RAM. Ctrl-C stops the server.\n'
@@ -38,8 +38,8 @@ for program in git curl tar sha256sum node npx setsid; do
   command -v "$program" >/dev/null 2>&1 || die "missing prerequisite: $program"
 done
 
-mkdir -p -- "${1:-$PWD/layajev-test-0.2.5}"
-work_dir=$(cd -- "${1:-$PWD/layajev-test-0.2.5}" && pwd -P)
+mkdir -p -- "${1:-$PWD/layajev-test-0.2.6}"
+work_dir=$(cd -- "${1:-$PWD/layajev-test-0.2.6}" && pwd -P)
 [[ $work_dir != / ]] || die 'WORK_DIR must not be the filesystem root'
 tools_dir=$work_dir/tools
 repository_dir=$work_dir/laya-go
@@ -91,7 +91,6 @@ export PATH="$go_dir/bin:$uv_dir:$tools_dir/bin:$PATH"
 export GOTOOLCHAIN=local GOPATH="$work_dir/go-path" GOCACHE="$work_dir/go-build-cache"
 export GOBIN="$tools_dir/bin" UV_PYTHON_INSTALL_DIR="$work_dir/python"
 export npm_config_cache="$work_dir/npm-cache"
-export ORT_DISABLE_TELEMETRY=1
 if [[ ! -x $tools_dir/bin/task ]]; then
   go install github.com/go-task/task/v3/cmd/task@v3.53.1
 fi

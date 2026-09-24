@@ -25,7 +25,7 @@ model into the npm package, and leaves the API running until Ctrl-C:
 curl --fail --silent --show-error --location \
   --output layajev-from-zero.sh \
   https://raw.githubusercontent.com/metalagman/laya-go/main/scripts/layajev-from-zero.sh
-bash layajev-from-zero.sh "$PWD/layajev-test-0.2.4"
+bash layajev-from-zero.sh "$PWD/layajev-test-0.2.6"
 ```
 
 Inspect the downloaded script before executing it. The first run downloads
