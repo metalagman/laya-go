@@ -8,6 +8,7 @@
 # Go build and test output.
 bin/
 dist/
+.omnidist/
 *.exe
 *.a
 *.o
