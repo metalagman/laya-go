@@ -5,6 +5,7 @@ vars:
   TASK_VERSION: v3.53.1
   GOLANGCI_LINT_VERSION: v2.13.2
   GOVULNCHECK_VERSION: v1.1.4
+  LAYAJEV_CONTAINER_VERSION: 0.2.6
 
 env:
   GOCACHE: "{{.ROOT_DIR}}/.cache/go-build"
@@ -676,6 +677,38 @@ tasks:
         msg: "Set OMNIDIST_VERSION to the staged candidate version."
     cmds:
       - bash scripts/smoke-npm-package.sh
+
+  container:build:
+    desc: Build the linux/amd64 layajev image from the exact published npm release; uses Docker Hub, Ubuntu packages, and npm.
+    preconditions:
+      - sh: command -v docker >/dev/null 2>&1
+        msg: "Docker is required."
+    cmds:
+      - docker build --platform linux/amd64 --build-arg LAYAJEV_VERSION={{.LAYAJEV_CONTAINER_VERSION}} -t layajev:{{.LAYAJEV_CONTAINER_VERSION}} .
+
+  container:doctor:
+    desc: Check the built image's packaged native runtime without a model bundle.
+    preconditions:
+      - sh: command -v docker >/dev/null 2>&1
+        msg: "Docker is required."
+    cmds:
+      - docker run --rm --entrypoint /opt/layajev/bin/layajev layajev:{{.LAYAJEV_CONTAINER_VERSION}} doctor
+
+  container:serve:
+    desc: Serve an already-local LAYA_BUNDLE_DIR read-only on host loopback; provide TLS/auth upstream.
+    preconditions:
+      - sh: command -v docker >/dev/null 2>&1
+        msg: "Docker is required."
+      - sh: test -n "${LAYA_BUNDLE_DIR:-}" && test -d "${LAYA_BUNDLE_DIR}"
+        msg: "Set LAYA_BUNDLE_DIR to an existing verified bundle directory."
+    cmds:
+      - |
+        case "${LAYA_BUNDLE_DIR}" in /*) ;; *) echo "LAYA_BUNDLE_DIR must be absolute"; exit 1;; esac
+        docker run --rm --user "$(id -u):$(id -g)" \
+          --read-only --tmpfs /tmp:rw,nosuid,nodev,size=64m \
+          --mount "type=bind,src=${LAYA_BUNDLE_DIR},dst=/models,readonly" \
+          --publish 127.0.0.1:8080:8080 --stop-timeout 60 \
+          layajev:{{.LAYAJEV_CONTAINER_VERSION}}
 
   package:verify:
     desc: Verify committed v0.1 source/package contents, licenses, scope, size, secrets, and protected paths.

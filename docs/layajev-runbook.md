@@ -1,6 +1,6 @@
 # `layajev` operations
 
-`layajev` serves a documented subset of the [TypeSafe Jev API](https://api.typesafe.ai/openapi.json) over one local Laya bundle. It is a protocol adapter, **not** the Jev model or a promise of identical decisions. The root `laya` library remains acquisition-free. Serving uses local, in-process inference via Go ADK. The only network acquisition is the operator-invoked `fetch` command. This is the source-checkout runbook; see [npm release and npx operations](layajev-npm-release.md) for the separately staged `linux/amd64` package. No npm package has been published by this runbook.
+`layajev` serves a documented subset of the [TypeSafe Jev API](https://api.typesafe.ai/openapi.json) over one local Laya bundle. It is a protocol adapter, **not** the Jev model or a promise of identical decisions. The root `laya` library remains acquisition-free. Serving uses local, in-process inference via Go ADK. The only network acquisition is the operator-invoked `fetch` command. This is the source-checkout runbook; see [npm release and npx operations](layajev-npm-release.md) for the published `linux/amd64` CLI and [container operations](layajev-container-runbook.md) for the production image. The released CLI and container do not include model weights.
 
 ## Prerequisites and preparation
 
@@ -35,6 +35,11 @@ go run -tags=laya_native ./cmd/layajev serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
 The default listener is `127.0.0.1:8080`. `serve` verifies the supplied bundle before opening the model. It never fetches or converts. The `laya_native` build tag, `CGO_LDFLAGS` pointing at the static tokenizer library's directory, and the native library paths above are required for real inference; an ordinary Go build intentionally has no native backend. The `layajev` CLI disables ONNX Runtime telemetry itself before native startup. To choose another local address, run `go run -tags=laya_native ./cmd/layajev serve --bundle "$LAYA_BUNDLE_DIR" --listen 127.0.0.1:9090`. A non-loopback address requires `--allow-remote`. The server itself has no TLS or bearer-auth layer; for remote clients, deploy a TLS/authenticating reverse proxy and restrict network access. Do not expose sensitive inputs through an unauthenticated public listener. The API does not log request bodies.
+
+For a deployable container, use the [Docker runbook](layajev-container-runbook.md).
+It packages the native dependencies from the exact npm release, runs without
+root, checks readiness, and mounts the verified bundle read-only. The bundle
+is still operator-owned; the container neither downloads nor converts it.
 
 First discover the actual local model name:
 

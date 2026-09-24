@@ -1,6 +1,6 @@
 # `layajev` npm release and `npx` operations
 
-The omnidist profile stages two MIT-licensed npm packages, `@metalagman/layajev`
+The omnidist profile publishes two MIT-licensed npm packages, `@metalagman/layajev`
 and its optional platform package `@metalagman/layajev-linux-x64`. Only
 `linux/amd64` with the pinned native build has been qualified. There is no
 Darwin, Windows, ARM, musl, or general Linux compatibility claim. Neither npm
@@ -8,7 +8,9 @@ package contains model weights or a Python inference service. Starting with
 version 0.2.2, the platform package includes the checksum-pinned ONNX Runtime
 shared library, its MIT license, and third-party notices. The 1.3 GiB FP32
 bundle remains a deployment-owned input. The release workflow builds from an
-exact Git tag and then publishes the verified npm packages.
+exact Git tag and then publishes the verified npm packages. The
+[production container](layajev-container-runbook.md) consumes the same exact
+published native package and accepts the bundle as a read-only mount.
 
 ## Run a published package
 
@@ -42,7 +44,7 @@ export LAYA_BUNDLE_DIR=/absolute/path/to/verified-bundle
 npx -y "@metalagman/layajev@$LAYAJEV_VERSION" serve --bundle "$LAYA_BUNDLE_DIR"
 ```
 
-Starting with the next release after 0.2.2, check an installed package before
+Starting with version 0.2.3, check an installed package before
 supplying a model with
 `npx -y "@metalagman/layajev@$LAYAJEV_VERSION" doctor`. It initializes and
 closes the packaged native runtime, but does not validate a model or the HTTP
@@ -63,7 +65,7 @@ subset, HTTP examples, and safe binding rules. The default server listens on
 `127.0.0.1:8080`; it provides neither TLS nor authentication. Do not expose it
 directly on a public interface.
 
-Starting with the next release after 0.2.0, the packaged `fetch` command uses
+Starting with version 0.2.1, the packaged `fetch` command uses
 an embedded pinned source manifest and works outside a source checkout:
 
 ```sh
@@ -145,12 +147,14 @@ a clean `npx` install. From the current `main` commit, choose a new stable
 SemVer version absent from both npm packages and push the exact tag:
 
 ```sh
-git tag v0.2.4
-git push origin v0.2.4
+: "${LAYAJEV_NEXT_VERSION:?Set an unused MAJOR.MINOR.PATCH version first}"
+git tag "v${LAYAJEV_NEXT_VERSION}"
+git push origin "v${LAYAJEV_NEXT_VERSION}"
 gh run list --workflow omnidist-release.yml --limit 5
 ```
 
-Replace `0.2.4` with the next confirmed unused version; never assume a
+Set `LAYAJEV_NEXT_VERSION` to the next confirmed unused SemVer version before
+running these commands; never assume a
 previous upload failed just because npm search or its web page lags. This
 workflow publishes only stable `vMAJOR.MINOR.PATCH` tags. It does not create
 or push tags or publish a GitHub Release.
