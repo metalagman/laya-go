@@ -63,6 +63,38 @@ func TestPackagedONNXRuntimeLibrary(t *testing.T) {
 	}
 }
 
+func TestNativeCommandsDisableTelemetry(t *testing.T) {
+	for _, test := range []struct {
+		name       string
+		command    []string
+		initialEnv string
+	}{
+		{name: "doctor absent", command: []string{"doctor"}},
+		{name: "doctor conflicting", command: []string{"doctor"}, initialEnv: "0"},
+		{name: "serve absent", command: []string{"serve", "--bundle", "missing"}},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Setenv("ORT_DISABLE_TELEMETRY", test.initialEnv)
+			if test.initialEnv == "" {
+				if err := os.Unsetenv("ORT_DISABLE_TELEMETRY"); err != nil {
+					t.Fatalf("unset telemetry environment: %v", err)
+				}
+			}
+			t.Setenv("LAYA_ONNXRUNTIME_LIBRARY", "/nonexistent/native-library.so")
+			command := NewCommand()
+			command.SetArgs(test.command)
+			command.SetOut(io.Discard)
+			command.SetErr(io.Discard)
+			if err := command.ExecuteContext(context.Background()); err == nil {
+				t.Fatal("native command unexpectedly succeeded with an invalid library")
+			}
+			if got := os.Getenv("ORT_DISABLE_TELEMETRY"); got != "1" {
+				t.Errorf("telemetry opt-out = %q, want 1", got)
+			}
+		})
+	}
+}
+
 func TestFetchPinned(t *testing.T) {
 	t.Parallel()
 	content := []byte("official pinned artifact")

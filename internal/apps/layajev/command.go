@@ -26,7 +26,7 @@ func newServeCommand() *cobra.Command {
 	command := &cobra.Command{
 		Use: "serve", Short: "Serve an already-local verified bundle",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := configurePackagedONNXRuntime(); err != nil {
+			if err := configureNativeRuntime(); err != nil {
 				return fmt.Errorf("serve: %w", err)
 			}
 			return Serve(cmd.Context(), cfg)
@@ -44,7 +44,7 @@ func newDoctorCommand() *cobra.Command {
 	return &cobra.Command{
 		Use: "doctor", Short: "Verify the local native runtime without a model bundle",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			if err := configurePackagedONNXRuntime(); err != nil {
+			if err := configureNativeRuntime(); err != nil {
 				return fmt.Errorf("doctor: %w", err)
 			}
 			runtime, err := laya.NewRuntime(cmd.Context(), laya.RuntimeOptions{})
@@ -60,7 +60,12 @@ func newDoctorCommand() *cobra.Command {
 	}
 }
 
-func configurePackagedONNXRuntime() error {
+// configureNativeRuntime establishes CLI-owned process policy before opening
+// the native runtime. The root laya library never changes its caller's env.
+func configureNativeRuntime() error {
+	if err := os.Setenv("ORT_DISABLE_TELEMETRY", "1"); err != nil {
+		return fmt.Errorf("disable ONNX Runtime telemetry: %w", err)
+	}
 	if os.Getenv("LAYA_ONNXRUNTIME_LIBRARY") != "" {
 		return nil
 	}
