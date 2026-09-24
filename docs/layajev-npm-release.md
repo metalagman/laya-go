@@ -12,6 +12,27 @@ exact Git tag and then publishes the verified npm packages.
 
 ## Run a published package
 
+For a clean `linux/amd64` machine with no model, SDK, Go, or uv installed, use
+the [from-zero smoke script](../scripts/layajev-from-zero.sh). It needs only
+Node/npx, Git, curl, tar, sha256sum, and setsid up front. Allow at least 10 GiB
+of free disk and 4 GiB RAM. It installs pinned Go and uv under the chosen work
+directory, downloads and verifies the pinned SDK and official model source,
+hydrates the locked exporter, converts a new local bundle, and checks the
+published package's `doctor` and HTTP API. It uses no `sudo`, does not write a
+model into the npm package, and leaves the API running until Ctrl-C:
+
+```sh
+curl --fail --silent --show-error --location \
+  --output layajev-from-zero.sh \
+  https://raw.githubusercontent.com/metalagman/laya-go/main/scripts/layajev-from-zero.sh
+bash layajev-from-zero.sh "$PWD/layajev-test-0.2.4"
+```
+
+Inspect the downloaded script before executing it. The first run downloads
+several GiB across the model, locked Python environment, and toolchains; a
+repeat run reuses local inputs and re-verifies the source and bundle. The API
+binds only to `127.0.0.1`.
+
 After a release has actually appeared on npm, use its exact version on a
 compatible `linux/amd64` host:
 
